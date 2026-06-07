@@ -25,17 +25,17 @@
 
 ### 1.1 项目初始化（全员参与，第1-2天）
 
-- [ ] `[全员]` 创建 Git 私有仓库，确定 `.gitignore`，提交初始 commit
-- [ ] `[全员]` 确定项目目录结构（按 plan.md 附录A），创建所有空目录和 `__init__.py`
-- [ ] `[全员]` 每人克隆仓库，确认能正常 push/pull
+- [X] `[全员]` 创建 Git 私有仓库，确定 `.gitignore`，提交初始 commit
+- [X] `[全员]` 确定项目目录结构（按 plan.md 附录A），创建所有空目录和 `__init__.py`
+- [X] `[全员]` 每人克隆仓库，确认能正常 push/pull
 
 ### 1.2 开发环境搭建（各成员并行，第1-2天）
 
 - [ ] `[全员]` 安装 Docker Desktop，验证 `docker compose version`
-- [ ] `[C]` 创建 `backend/requirements.txt`，包含所有 Python 依赖
-- [ ] `[C]` 创建 `backend/requirements.txt`：fastapi, uvicorn, websockets, httpx, sqlalchemy, python-multipart, reportlab, pefile, yara-python
-- [ ] `[D]` 使用 Vite 创建 React + TypeScript 项目：`npm create vite@latest frontend -- --template react-ts`
-- [ ] `[D]` 安装前端依赖：`npm install antd echarts echarts-for-react react-router-dom react-markdown highlight.js`
+- [X] `[C]` 创建 `backend/requirements.txt`，包含所有 Python 依赖
+- [X] `[C]` 创建 `backend/requirements.txt`：fastapi, uvicorn, websockets, httpx, sqlalchemy, python-multipart, reportlab, pefile, yara-python
+- [X] `[D]` 使用 Vite 创建 React + TypeScript 项目：`npm create vite@latest frontend -- --template react-ts`
+- [X] `[D]` 安装前端依赖：`npm install antd echarts echarts-for-react react-router-dom react-markdown highlight.js`
 - [ ] `[C]` 创建 `docker-compose.yml`（前端 Nginx + 后端 Uvicorn + Redis）
 - [ ] `[全员]` 验证 `docker compose up` 后前后端均可访问
 
@@ -49,8 +49,8 @@
 
 ### 1.4 API Key 申请（成员 A，第2天）
 
-- [ ] `[A]` 注册 DeepSeek 开发者账号，申请 API Key
-- [ ] `[A]` 测试 API Key 可用性：写一个简单脚本调用 chat/completions
+- [X] `[A]` 注册 DeepSeek 开发者账号，申请 API Key
+- [X] `[A]` 测试 API Key 可用性：写一个简单脚本调用 chat/completions
 - [ ] `[A]` 将 API Key 配置在 `.env` 文件中（不提交到 Git）
 - [ ] `[C]` 创建 `.env.example` 模板文件提交到仓库
 
