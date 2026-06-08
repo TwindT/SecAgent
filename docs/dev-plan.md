@@ -31,21 +31,21 @@
 
 ### 1.2 开发环境搭建（各成员并行，第1-2天）
 
-- [ ] `[全员]` 安装 Docker Desktop，验证 `docker compose version`
+- [X] `[全员]` 安装 Docker Desktop，验证 `docker compose version`
 - [X] `[C]` 创建 `backend/requirements.txt`，包含所有 Python 依赖
 - [X] `[C]` 创建 `backend/requirements.txt`：fastapi, uvicorn, websockets, httpx, sqlalchemy, python-multipart, reportlab, pefile, yara-python
 - [X] `[D]` 使用 Vite 创建 React + TypeScript 项目：`npm create vite@latest frontend -- --template react-ts`
 - [X] `[D]` 安装前端依赖：`npm install antd echarts echarts-for-react react-router-dom react-markdown highlight.js`
-- [ ] `[C]` 创建 `docker-compose.yml`（前端 Nginx + 后端 Uvicorn + Redis）
-- [ ] `[全员]` 验证 `docker compose up` 后前后端均可访问
+- [X] `[C]` 创建 `docker-compose.yml`（前端 Nginx + 后端 Uvicorn + Redis）
+- [X] `[全员]` 验证 `docker compose up` 后前后端均可访问
 
 ### 1.3 数据库设计（成员 C，第2-3天）
 
-- [ ] `[C]` 设计 `task` 表：id, type(漏洞检测/恶意分析), status, input_path, input_content, result_json, created_at, updated_at
-- [ ] `[C]` 设计 `analysis_step` 表：id, task_id, step_num, thought, action, observation, created_at
-- [ ] `[C]` 设计 `conversation` 表：id, task_id, role, content, created_at
-- [ ] `[C]` 编写 SQLAlchemy 模型代码（`backend/app/models/`）
-- [ ] `[C]` 编写数据库初始化脚本，提交后可跑通
+- [x] `[C]` 设计 `task` 表：id, type(漏洞检测/恶意分析), status, input_path, input_content, result_json, created_at, updated_at
+- [x] `[C]` 设计 `analysis_step` 表：id, task_id, step_num, thought, action, observation, created_at
+- [x] `[C]` 设计 `conversation` 表：id, task_id, role, content, created_at
+- [x] `[C]` 编写 SQLAlchemy 模型代码（`backend/app/models/`）
+- [x] `[C]` 编写数据库初始化脚本，提交后可跑通
 
 ### 1.4 API Key 申请（成员 A，第2天）
 
@@ -456,7 +456,7 @@
 > 第1周完成约定，开发过程中严格遵守
 
 - [ ] 工具 Schema 标准格式（JSON）→ `[A]+[B]`
-- [ ] 数据库表结构 → `[C]`
+- [x] 数据库表结构 → `[C]`
 - [ ] REST API 接口文档（Swagger 自动生成）→ `[C]`
 - [ ] WebSocket 消息格式 → `[A]+[D]`
 - [ ] 分析结果 JSON 结构 → `[A]+[C]`
