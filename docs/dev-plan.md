@@ -41,27 +41,27 @@
 
 ### 1.3 数据库设计（成员 C，第2-3天）
 
-- [x] `[C]` 设计 `task` 表：id, type(漏洞检测/恶意分析), status, input_path, input_content, result_json, created_at, updated_at
-- [x] `[C]` 设计 `analysis_step` 表：id, task_id, step_num, thought, action, observation, created_at
-- [x] `[C]` 设计 `conversation` 表：id, task_id, role, content, created_at
-- [x] `[C]` 编写 SQLAlchemy 模型代码（`backend/app/models/`）
-- [x] `[C]` 编写数据库初始化脚本，提交后可跑通
+- [X] `[C]` 设计 `task` 表：id, type(漏洞检测/恶意分析), status, input_path, input_content, result_json, created_at, updated_at
+- [X] `[C]` 设计 `analysis_step` 表：id, task_id, step_num, thought, action, observation, created_at
+- [X] `[C]` 设计 `conversation` 表：id, task_id, role, content, created_at
+- [X] `[C]` 编写 SQLAlchemy 模型代码（`backend/app/models/`）
+- [X] `[C]` 编写数据库初始化脚本，提交后可跑通
 
 ### 1.4 API Key 申请（成员 A，第2天）
 
 - [X] `[A]` 注册 DeepSeek 开发者账号，申请 API Key
 - [X] `[A]` 测试 API Key 可用性：写一个简单脚本调用 chat/completions
 - [ ] `[A]` 将 API Key 配置在 `.env` 文件中（不提交到 Git）
-- [ ] `[C]` 创建 `.env.example` 模板文件提交到仓库
+- [X] `[C]` 创建 `.env.example` 模板文件提交到仓库
 
-### 1.5 知识库数据准备（成员 B，第2-3天）
+### 1.5 知识库数据准备（成员 B，第 2-3 天）
 
-- [ ] `[B]` 下载 MITRE CWE 列表 JSON，存入 `backend/data/cwe.json`
-- [ ] `[B]` 下载 MITRE ATT&CK Enterprise STIX 数据，存入 `backend/data/attack.json`
-- [ ] `[B]` 编写 CWE 数据加载/查询脚本（按 ID 查询名称和描述）
-- [ ] `[B]` 编写 ATT&CK 数据加载/查询脚本（按技术 ID 查询名称和战术）
-- [ ] `[B]` 收集/编写 5+ 条常用 YARA 规则，存入 `backend/data/yara_rules/`
-- [ ] `[B]` 写测试脚本验证所有数据文件可正确加载
+- [x] `[B]` 下载 MITRE CWE 列表 JSON，存入 `backend/data/cwe.json`
+- [x] `[B]` 下载 MITRE ATT&CK Enterprise STIX 数据，存入 `backend/data/attack.json`
+- [x] `[B]` 编写 CWE 数据加载/查询脚本（按 ID 查询名称和描述）
+- [x] `[B]` 编写 ATT&CK 数据加载/查询脚本（按技术 ID 查询名称和战术）
+- [x] `[B]` 收集/编写 5+ 条常用 YARA 规则，存入 `backend/data/yara_rules/`
+- [x] `[B]` 写测试脚本验证所有数据文件可正确加载
 
 ### 1.6 接口规范约定（全员参与，第3-4天）
 
@@ -456,7 +456,7 @@
 > 第1周完成约定，开发过程中严格遵守
 
 - [ ] 工具 Schema 标准格式（JSON）→ `[A]+[B]`
-- [x] 数据库表结构 → `[C]`
+- [X] 数据库表结构 → `[C]`
 - [ ] REST API 接口文档（Swagger 自动生成）→ `[C]`
 - [ ] WebSocket 消息格式 → `[A]+[D]`
 - [ ] 分析结果 JSON 结构 → `[A]+[C]`

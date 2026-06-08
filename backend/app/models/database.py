@@ -72,6 +72,9 @@ def init_db(database_url: str = "sqlite:///./secagent.db"):
     Base.metadata.create_all(bind=engine)
 
 def get_db():
+    global SessionLocal
+    if SessionLocal is None:
+        init_db()
     db = SessionLocal()
     try:
         yield db

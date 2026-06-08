@@ -1,0 +1,467 @@
+{
+  "version": "14.1",
+  "tactics": [
+    {
+      "id": "TA0001",
+      "name": "Initial Access",
+      "description": "The adversary is trying to get into your network.",
+      "techniques": [
+        {
+          "id": "T1566",
+          "name": "Phishing",
+          "description": "Adversaries may send phishing messages to gain access to victim systems.",
+          "keywords": ["phish", "email", "attachment", "link", "social engineering", "spear phishing"]
+        },
+        {
+          "id": "T1190",
+          "name": "Exploit Public-Facing Application",
+          "description": "Adversaries may attempt to exploit a weakness in an Internet-facing host or system to gain access.",
+          "keywords": ["exploit", "vulnerability", "web app", "public facing", "internet exposed"]
+        },
+        {
+          "id": "T1078",
+          "name": "Valid Accounts",
+          "description": "Adversaries may obtain and abuse credentials of valid accounts to access systems.",
+          "keywords": ["valid account", "credentials", "login", "authenticate"]
+        },
+        {
+          "id": "T1562",
+          "name": "Impair Defenses",
+          "description": "Adversaries may maliciously modify components of a victim environment to weaken or disable security defenses.",
+          "keywords": ["disable", "defense", "antivirus", "firewall", "edr"]
+        },
+        {
+          "id": "T1133",
+          "name": "External Remote Services",
+          "description": "Adversaries may use external remote services to initially access victim systems.",
+          "keywords": ["remote access", "vpn", "rdp", "ssh", "external service"]
+        }
+      ]
+    },
+    {
+      "id": "TA0002",
+      "name": "Execution",
+      "description": "The adversary is trying to run malicious code.",
+      "techniques": [
+        {
+          "id": "T1059",
+          "name": "Command and Scripting Interpreter",
+          "description": "Adversaries may abuse command and scripting interpreters to execute commands, scripts, or binaries.",
+          "keywords": ["cmd", "powershell", "bash", "script", "shell", "command"]
+        },
+        {
+          "id": "T1053",
+          "name": "Scheduled Task/Job",
+          "description": "Adversaries may abuse task scheduling functionality to facilitate initial or recurring execution of malicious code.",
+          "keywords": ["schedule", "task", "cron", "at", "job", "task scheduler"]
+        },
+        {
+          "id": "T1204",
+          "name": "User Execution",
+          "description": "An adversary may rely upon specific actions by a user in order to gain execution.",
+          "keywords": ["user execute", "double click", "open", "run", "macro"]
+        },
+        {
+          "id": "T1060",
+          "name": "Registry Run Keys / Startup Folder",
+          "description": "Adversaries may achieve persistence by adding a program to a startup folder or referencing it with a registry run key.",
+          "keywords": ["registry", "run key", "startup", "autoexec"]
+        },
+        {
+          "id": "T1547",
+          "name": "Boot or Logon Autostart Execution",
+          "description": "Adversaries may configure system settings to automatically execute a program during system boot or logon.",
+          "keywords": ["autostart", "boot", "logon", "startup"]
+        },
+        {
+          "id": "T1127",
+          "name": "Trusted Developer Utilities Proxy Execution",
+          "description": "Adversaries may use trusted developer utilities to proxy execution of malicious code.",
+          "keywords": ["developer tools", "visual studio", "msbuild", "csc", "regsvr32"]
+        }
+      ]
+    },
+    {
+      "id": "TA0003",
+      "name": "Persistence",
+      "description": "The adversary is trying to maintain their foothold.",
+      "techniques": [
+        {
+          "id": "T1547",
+          "name": "Boot or Logon Autostart Execution",
+          "description": "Adversaries may configure system settings to automatically execute a program during system boot or logon.",
+          "keywords": ["startup", "autostart", "registry", "run key", "boot"]
+        },
+        {
+          "id": "T1136",
+          "name": "Create Account",
+          "description": "Adversaries may create an account to maintain access to victim systems.",
+          "keywords": ["create user", "add account", "user account", "local account"]
+        },
+        {
+          "id": "T1098",
+          "name": "Account Manipulation",
+          "description": "Adversaries may manipulate accounts to maintain access to victim systems.",
+          "keywords": ["modify account", "change password", "enable account", "account lockout"]
+        },
+        {
+          "id": "T1546",
+          "name": "Event Triggered Execution",
+          "description": "Adversaries may establish persistence by executing malicious content triggered by an event.",
+          "keywords": ["event trigger", "wmi event", "logon trigger", "file change"]
+        },
+        {
+          "id": "T1037",
+          "name": "Bootkit",
+          "description": "Adversaries may use bootkits to persist on systems at a level below the operating system.",
+          "keywords": ["bootkit", "firmware", "bios", "uefi", "rootkit"]
+        }
+      ]
+    },
+    {
+      "id": "TA0004",
+      "name": "Privilege Escalation",
+      "description": "The adversary is trying to gain higher-level permissions.",
+      "techniques": [
+        {
+          "id": "T1548",
+          "name": "Abuse Elevation Control Mechanism",
+          "description": "Adversaries may circumvent mechanisms designed to control elevation of user privileges.",
+          "keywords": ["elevate", "privilege", "sudo", "uac", "admin"]
+        },
+        {
+          "id": "T1068",
+          "name": "Exploitation for Privilege Escalation",
+          "description": "Adversaries may exploit software vulnerabilities to gain elevated privileges.",
+          "keywords": ["exploit", "privilege escalation", "elevation", "vulnerability"]
+        },
+        {
+          "id": "T1484",
+          "name": "Domain Policy Modification",
+          "description": "Adversaries may modify Active Directory domain policies to gain elevated privileges.",
+          "keywords": ["group policy", "gpo", "domain policy", "ad"]
+        },
+        {
+          "id": "T1078",
+          "name": "Valid Accounts",
+          "description": "Adversaries may obtain and abuse credentials of valid accounts to access systems.",
+          "keywords": ["admin account", "privileged account", "valid credentials"]
+        },
+        {
+          "id": "T1543",
+          "name": "Create or Modify System Process",
+          "description": "Adversaries may create or modify system processes to execute malicious code with elevated privileges.",
+          "keywords": ["service", "system process", "modify service", "create service"]
+        }
+      ]
+    },
+    {
+      "id": "TA0005",
+      "name": "Defense Evasion",
+      "description": "The adversary is trying to avoid being detected.",
+      "techniques": [
+        {
+          "id": "T1027",
+          "name": "Obfuscated Files or Information",
+          "description": "Adversaries may attempt to make an executable or file difficult to discover or analyze.",
+          "keywords": ["obfuscate", "encode", "pack", "encrypt", "base64", "xor"]
+        },
+        {
+          "id": "T1562",
+          "name": "Impair Defenses",
+          "description": "Adversaries may maliciously modify components of a victim environment to weaken or disable security defenses.",
+          "keywords": ["disable", "defense", "av", "antivirus", "firewall", "edr", "siem"]
+        },
+        {
+          "id": "T1070",
+          "name": "Indicator Removal",
+          "description": "Adversaries may delete or modify artifacts left on a system after an intrusion.",
+          "keywords": ["delete log", "clear history", "remove evidence", "clean up"]
+        },
+        {
+          "id": "T1561",
+          "name": "Disable or Modify Tools",
+          "description": "Adversaries may disable or modify security tools to avoid detection.",
+          "keywords": ["disable av", "kill process", "modify tool", "security tool"]
+        },
+        {
+          "id": "T1005",
+          "name": "Data from Local System",
+          "description": "Adversaries may search local file systems and remote file shares for sensitive information.",
+          "keywords": ["collect", "steal", "data", "document", "file"]
+        },
+        {
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may deobfuscate or decode files or information that were previously obfuscated or encoded.",
+          "keywords": ["decode", "deobfuscate", "decrypt", "unpack"]
+        },
+        {
+          "id": "T1036",
+          "name": "Masquerading",
+          "description": "Adversaries may attempt to manipulate features of their artifacts to make them appear legitimate or benign.",
+          "keywords": ["fake", "disguise", "spoof", "masquerade", "legitimate"]
+        }
+      ]
+    },
+    {
+      "id": "TA0006",
+      "name": "Credential Access",
+      "description": "The adversary is trying to steal account names and passwords.",
+      "techniques": [
+        {
+          "id": "T1003",
+          "name": "OS Credential Dumping",
+          "description": "Adversaries may attempt to extract credential material from the operating system and software.",
+          "keywords": ["credential dump", "hash", "password", "lsass", "sam", "mimikatz"]
+        },
+        {
+          "id": "T1555",
+          "name": "Credentials from Password Stores",
+          "description": "Adversaries may search for common password storage locations to obtain user credentials.",
+          "keywords": ["password store", "credential manager", "keychain", "browser password"]
+        },
+        {
+          "id": "T1056",
+          "name": "Input Capture",
+          "description": "Adversaries may use methods to capture user input, such as keystroke logging.",
+          "keywords": ["keylogger", "keystroke", "input capture", "hook", "keyboard"]
+        },
+        {
+          "id": "T1552",
+          "name": "Unsecured Credentials",
+          "description": "Adversaries may search for insecurely stored credentials in various locations on a system.",
+          "keywords": ["unsecured", "credentials", "plaintext", "hardcoded", "config file"]
+        },
+        {
+          "id": "T1558",
+          "name": "Steal or Forge Kerberos Tickets",
+          "description": "Adversaries may attempt to steal or forge Kerberos tickets to gain access to systems.",
+          "keywords": ["kerberos", "ticket", "golden ticket", "silver ticket", "pass the ticket"]
+        },
+        {
+          "id": "T1110",
+          "name": "Brute Force",
+          "description": "Adversaries may use brute force techniques to attempt to gain access to accounts.",
+          "keywords": ["brute force", "password cracking", "dictionary attack", "credential stuffing"]
+        }
+      ]
+    },
+    {
+      "id": "TA0007",
+      "name": "Discovery",
+      "description": "The adversary is trying to figure out your environment.",
+      "techniques": [
+        {
+          "id": "T1087",
+          "name": "Account Discovery",
+          "description": "Adversaries may attempt to get a listing of local system or domain accounts.",
+          "keywords": ["account", "user", "group", "whoami", "net user"]
+        },
+        {
+          "id": "T1082",
+          "name": "System Information Discovery",
+          "description": "An adversary may attempt to get detailed information about the operating system and hardware.",
+          "keywords": ["system info", "os version", "hostname", "hardware", "cpu", "memory"]
+        },
+        {
+          "id": "T1083",
+          "name": "File and Directory Discovery",
+          "description": "Adversaries may enumerate files and directories or search for specific information.",
+          "keywords": ["file", "directory", "list", "dir", "ls", "find"]
+        },
+        {
+          "id": "T1016",
+          "name": "System Network Configuration Discovery",
+          "description": "Adversaries may gather information about the network configuration and topology.",
+          "keywords": ["network", "ip", "subnet", "route", "dns", "domain"]
+        },
+        {
+          "id": "T1018",
+          "name": "Remote System Discovery",
+          "description": "Adversaries may attempt to discover remote systems on a network.",
+          "keywords": ["scan", "network scan", "ping", "port scan", "discover hosts"]
+        },
+        {
+          "id": "T1069",
+          "name": "Permission Groups Discovery",
+          "description": "Adversaries may attempt to find local or domain groups and permission settings.",
+          "keywords": ["group", "permission", "acl", "domain groups", "local groups"]
+        }
+      ]
+    },
+    {
+      "id": "TA0008",
+      "name": "Lateral Movement",
+      "description": "The adversary is trying to move through your environment.",
+      "techniques": [
+        {
+          "id": "T1021",
+          "name": "Remote Services",
+          "description": "Adversaries may use Valid Accounts to log into a service that accepts remote connections.",
+          "keywords": ["remote", "rdp", "ssh", "winrm", "telnet", "remote desktop"]
+        },
+        {
+          "id": "T1075",
+          "name": "Pass the Hash",
+          "description": "Adversaries may pass the hash to authenticate to a remote system.",
+          "keywords": ["pass the hash", "pth", "ntlm", "hash reuse"]
+        },
+        {
+          "id": "T1550",
+          "name": "Use Alternate Authentication Material",
+          "description": "Adversaries may use alternate authentication materials to bypass normal authentication.",
+          "keywords": ["alternate auth", "token", "cookie", "session", "pass the ticket"]
+        },
+        {
+          "id": "T1020",
+          "name": "Automated Collection",
+          "description": "Adversaries may use automated techniques to collect data from a network.",
+          "keywords": ["automated", "collect", "data gathering", "script"]
+        },
+        {
+          "id": "T1047",
+          "name": "Windows Management Instrumentation",
+          "description": "Adversaries may abuse Windows Management Instrumentation to move laterally.",
+          "keywords": ["wmi", "lateral movement", "remote execution", "query"]
+        }
+      ]
+    },
+    {
+      "id": "TA0009",
+      "name": "Collection",
+      "description": "The adversary is trying to gather data of interest.",
+      "techniques": [
+        {
+          "id": "T1005",
+          "name": "Data from Local System",
+          "description": "Adversaries may search local file systems and remote file shares for sensitive information.",
+          "keywords": ["collect", "steal", "data", "document", "file", "copy"]
+        },
+        {
+          "id": "T1113",
+          "name": "Screen Capture",
+          "description": "Adversaries may attempt to take screen captures of the desktop to gather information.",
+          "keywords": ["screenshot", "screen capture", "desktop", "image capture"]
+        },
+        {
+          "id": "T1114",
+          "name": "Email Collection",
+          "description": "Adversaries may target user email to collect sensitive information.",
+          "keywords": ["email", "outlook", "mailbox", "imap", "pop"]
+        },
+        {
+          "id": "T1115",
+          "name": "Clipboard Data",
+          "description": "Adversaries may collect data from the clipboard.",
+          "keywords": ["clipboard", "copy paste", "data collection"]
+        },
+        {
+          "id": "T1074",
+          "name": "Data Staged",
+          "description": "Adversaries may stage collected data in a central location before exfiltration.",
+          "keywords": ["stage", "data staging", "temporary storage", "collect"]
+        }
+      ]
+    },
+    {
+      "id": "TA0011",
+      "name": "Command and Control",
+      "description": "The adversary is trying to communicate with compromised systems.",
+      "techniques": [
+        {
+          "id": "T1071",
+          "name": "Application Layer Protocol",
+          "description": "Adversaries may use common application layer protocols to blend with normal network traffic.",
+          "keywords": ["http", "https", "dns", "ftp", "protocol", "c2", "command control"]
+        },
+        {
+          "id": "T1105",
+          "name": "Ingress Tool Transfer",
+          "description": "Adversaries may transfer tools or files to a compromised system.",
+          "keywords": ["download", "upload", "transfer", "file transfer", "tool"]
+        },
+        {
+          "id": "T1095",
+          "name": "Non-Standard Port",
+          "description": "Adversaries may use non-standard ports for command and control communications.",
+          "keywords": ["port", "non-standard", "c2 port", "network"]
+        },
+        {
+          "id": "T1072",
+          "name": "Software Deployment Tools",
+          "description": "Adversaries may use legitimate software deployment tools to establish C2 channels.",
+          "keywords": ["software deployment", "sccm", "puppet", "ansible", "c2"]
+        }
+      ]
+    },
+    {
+      "id": "TA0010",
+      "name": "Exfiltration",
+      "description": "The adversary is trying to steal your data.",
+      "techniques": [
+        {
+          "id": "T1041",
+          "name": "Exfiltration Over Command and Control Channel",
+          "description": "Adversaries may steal data by exfiltrating it over an existing command and control channel.",
+          "keywords": ["exfiltrate", "data theft", "exfiltration", "c2 channel"]
+        },
+        {
+          "id": "T1048",
+          "name": "Exfiltration Over Alternative Protocol",
+          "description": "Adversaries may steal data by exfiltrating it over a different protocol than the C2 channel.",
+          "keywords": ["ftp", "smb", "email exfil", "alternative protocol"]
+        },
+        {
+          "id": "T1567",
+          "name": "Exfiltration Over Web Service",
+          "description": "Adversaries may exfiltrate data over web services such as cloud storage.",
+          "keywords": ["cloud", "dropbox", "google drive", "web service", "upload"]
+        },
+        {
+          "id": "T1020",
+          "name": "Automated Exfiltration",
+          "description": "Adversaries may use automated techniques to exfiltrate data.",
+          "keywords": ["automated", "script", "data exfiltration", "transfer"]
+        }
+      ]
+    },
+    {
+      "id": "TA0040",
+      "name": "Impact",
+      "description": "The adversary is trying to manipulate, interrupt, or destroy your systems and data.",
+      "techniques": [
+        {
+          "id": "T1486",
+          "name": "Data Encrypted for Impact",
+          "description": "Adversaries may encrypt data on target systems to disrupt availability.",
+          "keywords": ["ransomware", "encrypt", "crypto", "locker", "ransom"]
+        },
+        {
+          "id": "T1490",
+          "name": "Inhibit System Recovery",
+          "description": "Adversaries may delete or remove built-in operating system data and utilities.",
+          "keywords": ["delete backup", "vss", "shadow copy", "restore", "recovery"]
+        },
+        {
+          "id": "T1485",
+          "name": "Data Destruction",
+          "description": "Adversaries may destroy data and files on specific systems.",
+          "keywords": ["destroy", "delete", "wipe", "format", "corrupt"]
+        },
+        {
+          "id": "T1489",
+          "name": "Service Stop",
+          "description": "Adversaries may stop services to disrupt system functionality.",
+          "keywords": ["stop service", "disable service", "disrupt", "denial of service"]
+        },
+        {
+          "id": "T1565",
+          "name": "Data Manipulation",
+          "description": "Adversaries may manipulate data to affect system integrity or cause confusion.",
+          "keywords": ["manipulate", "alter", "modify data", "corrupt"]
+        }
+      ]
+    }
+  ]
+}
