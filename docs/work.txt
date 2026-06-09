@@ -20,7 +20,7 @@
 
 ### 安全智能大脑——Agent 推理引擎与 LLM 决策调度
 
-成员C负责 Agent 核心引擎的开发，技术栈为 Python + DeepSeek API + ReAct 范式。这是整个项目的"大脑"，核心工作包括：封装 DeepSeek API 调用（同步及流式输出）；实现 ReAct 主循环（Thought → Action → Observe），包含步数限制、超时控制、重试机制和兜底策略；设计 Function Calling 工具调度机制，管理工具注册、Schema 校验和调用结果反馈；编写 System Prompt 和 Few-shot 示例，定义 Agent 的安全分析师角色、行为边界和输出规范。这一模块的挑战不在代码量，而在于 Prompt 调优和循环逻辑的稳健性。
+成员C负责 Agent 核心引擎的开发，技术栈为 Python + DashScope API + ReAct 范式。这是整个项目的"大脑"，核心工作包括：封装 DashScope API 调用（同步及流式输出）；实现 ReAct 主循环（Thought → Action → Observe），包含步数限制、超时控制、重试机制和兜底策略；设计 Function Calling 工具调度机制，管理工具注册、Schema 校验和调用结果反馈；编写 System Prompt 和 Few-shot 示例，定义 Agent 的安全分析师角色、行为边界和输出规范。这一模块的挑战不在代码量，而在于 Prompt 调优和循环逻辑的稳健性。
 
 **【成员C个人任务概述】**
 
@@ -42,3 +42,10 @@ Agent 交互体验与安全数据呈现（杨光超）
 后端架构与报告生成引擎（罗弋）
 Agent 推理引擎与 LLM 决策调度（先江涛）
 多源工具链集成与威胁情报融合（罗恒鑫）
+
+
+docker compose up -d --build frontend
+
+docker compose restart backend
+
+http://192.168.83.128:8000/docs

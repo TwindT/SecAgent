@@ -49,7 +49,7 @@
 
 ### 1.4 API Key 申请（成员 A，第2天）
 
-- [X] `[A]` 注册 DeepSeek 开发者账号，申请 API Key
+- [X] `[A]` 注册阿里百练平台账号，申请 DashScope API Key
 - [X] `[A]` 测试 API Key 可用性：写一个简单脚本调用 chat/completions
 - [ ] `[A]` 将 API Key 配置在 `.env` 文件中（不提交到 Git）
 - [X] `[C]` 创建 `.env.example` 模板文件提交到仓库
@@ -65,20 +65,20 @@
 
 ### 1.6 接口规范约定（全员参与，第3-4天）
 
-- [ ] `[A]+[B]` 约定**工具 Schema 标准格式**（JSON 结构：name, description, parameters）
-- [ ] `[A]+[C]` 约定**分析结果 JSON 结构**（vulnerabilities 数组、malware_analysis 对象等）
-- [ ] `[A]+[D]` 约定**WebSocket 消息格式**（type: thought/action/observation/done/error）
-- [ ] `[C]+[D]` **FastAPI 自动生成 Swagger 文档**，作为前后端接口契约
-- [ ] `[全员]` 将上述约定写入 `docs/接口规范.md` 并提交
+- [X] `[A]+[B]` 约定**工具 Schema 标准格式**（JSON 结构：name, description, parameters）
+- [X] `[A]+[C]` 约定**分析结果 JSON 结构**（vulnerabilities 数组、malware_analysis 对象等）
+- [X] `[A]+[D]` 约定**WebSocket 消息格式**（type: thought/action/observation/done/error）
+- [X] `[C]+[D]` **FastAPI 自动生成 Swagger 文档**，作为前后端接口契约
+- [X] `[全员]` 将上述约定写入 `docs/接口规范.md` 并提交
 
 ### 1.7 脚手架验证（全员，第4-5天）
 
-- [ ] `[C]` 实现 FastAPI 根路由 `/` 和健康检查 `/health`
-- [ ] `[C]` 实现第一个 API：`POST /api/tasks`（仅创建空任务，返回 task_id）
-- [ ] `[D]` 实现 React 首页（仅显示 "SecAgent" 标题 + Ant Design 布局框架）
-- [ ] `[D]` 从首页调用 `/api/tasks` 验证前后端通信（即使返回空列表）
-- [ ] `[A]` 写一个最小 LLM 调用脚本：发送消息给 DeepSeek，打印回复
-- [ ] `[B]` 写一个最小 semgrep 调用脚本：扫描一段 Python 代码，打印结果
+- [X] `[C]` 实现 FastAPI 根路由 `/` 和健康检查 `/health`
+- [X] `[C]` 实现第一个 API：`POST /api/tasks`（仅创建空任务，返回 task_id）
+- [X] `[D]` 实现 React 首页（仅显示 "SecAgent" 标题 + Ant Design 布局框架）
+- [X] `[D]` 从首页调用 `/api/tasks` 验证前后端通信（即使返回空列表）
+- [X] `[A]` 写一个最小 LLM 调用脚本：发送消息给阿里百练通义千问，打印回复
+- [X] `[B]` 写一个最小 semgrep 调用脚本：扫描一段 Python 代码，打印结果
 - [ ] `[全员]` Docker Compose 一键启动全栈验证通过 ✅
 
 ---
