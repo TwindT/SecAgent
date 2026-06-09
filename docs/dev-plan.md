@@ -51,7 +51,7 @@
 
 - [X] `[A]` 注册阿里百练平台账号，申请 DashScope API Key
 - [X] `[A]` 测试 API Key 可用性：写一个简单脚本调用 chat/completions
-- [ ] `[A]` 将 API Key 配置在 `.env` 文件中（不提交到 Git）
+- [X] `[A]` 将 API Key 配置在 `.env` 文件中（不提交到 Git）
 - [X] `[C]` 创建 `.env.example` 模板文件提交到仓库
 
 ### 1.5 知识库数据准备（成员 B，第 2-3 天）
