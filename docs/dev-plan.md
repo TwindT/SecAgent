@@ -56,12 +56,12 @@
 
 ### 1.5 知识库数据准备（成员 B，第 2-3 天）
 
-- [x] `[B]` 下载 MITRE CWE 列表 JSON，存入 `backend/data/cwe.json`
-- [x] `[B]` 下载 MITRE ATT&CK Enterprise STIX 数据，存入 `backend/data/attack.json`
-- [x] `[B]` 编写 CWE 数据加载/查询脚本（按 ID 查询名称和描述）
-- [x] `[B]` 编写 ATT&CK 数据加载/查询脚本（按技术 ID 查询名称和战术）
-- [x] `[B]` 收集/编写 5+ 条常用 YARA 规则，存入 `backend/data/yara_rules/`
-- [x] `[B]` 写测试脚本验证所有数据文件可正确加载
+- [X] `[B]` 下载 MITRE CWE 列表 JSON，存入 `backend/data/cwe.json`
+- [X] `[B]` 下载 MITRE ATT&CK Enterprise STIX 数据，存入 `backend/data/attack.json`
+- [X] `[B]` 编写 CWE 数据加载/查询脚本（按 ID 查询名称和描述）
+- [X] `[B]` 编写 ATT&CK 数据加载/查询脚本（按技术 ID 查询名称和战术）
+- [X] `[B]` 收集/编写 5+ 条常用 YARA 规则，存入 `backend/data/yara_rules/`
+- [X] `[B]` 写测试脚本验证所有数据文件可正确加载
 
 ### 1.6 接口规范约定（全员参与，第3-4天）
 
@@ -79,7 +79,7 @@
 - [X] `[D]` 从首页调用 `/api/tasks` 验证前后端通信（即使返回空列表）
 - [X] `[A]` 写一个最小 LLM 调用脚本：发送消息给阿里百练通义千问，打印回复
 - [X] `[B]` 写一个最小 semgrep 调用脚本：扫描一段 Python 代码，打印结果
-- [ ] `[全员]` Docker Compose 一键启动全栈验证通过 ✅
+- [X] `[全员]` Docker Compose 一键启动全栈验证通过 ✅
 
 ---
 

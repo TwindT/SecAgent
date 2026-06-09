@@ -24,7 +24,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:///./app.db
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
     volumes:
       - ./backend:/app
       - backend-data:/app/data
