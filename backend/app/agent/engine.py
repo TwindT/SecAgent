@@ -114,13 +114,33 @@ class AgentEngine:
             logger.error("Agent 执行异常: %s", e)
             result = {"content": None, "error": str(e)}
 
+        elapsed = round(time.time() - self._start_time, 1)
+
+        # 推送完成/错误步骤
+        if result.get("error"):
+            self._push_step({
+                "step_num": self.step_count,
+                "type": "error",
+                "data": {"message": result["error"], "elapsed_seconds": elapsed},
+            })
+        else:
+            self._push_step({
+                "step_num": self.step_count,
+                "type": "done",
+                "data": {
+                    "message": "分析完成",
+                    "elapsed_seconds": elapsed,
+                    "total_steps": self.step_count,
+                },
+            })
+
         return {
             "task_type": task_type,
             "steps": self.steps,
             "result": result.get("content"),
             "error": result.get("error"),
             "total_steps": self.step_count,
-            "elapsed_seconds": round(time.time() - self._start_time, 1),
+            "elapsed_seconds": elapsed,
             "usage": self.llm.total_usage,
         }
 

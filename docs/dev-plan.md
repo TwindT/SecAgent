@@ -125,10 +125,10 @@
 
 ### 2.5 WebSocket 实时推送（成员 A + C，第4-5天）
 
-- [ ] `[C]` 实现 WebSocket 端点：`ws://localhost:8000/ws/{task_id}`
-- [ ] `[A]` ReAct 每一步通过回调函数推送状态更新
-- [ ] `[A]` 推送数据结构：`{type: "thought"|"action"|"observation"|"done"|"error", data: {...}}`
-- [ ] `[C]` WebSocket 连接管理：心跳检测、断线重连、任务结束自动关闭
+- [X] `[C]` 实现 WebSocket 端点：`ws://localhost:8000/ws/{task_id}`
+- [X] `[A]` ReAct 每一步通过回调函数推送状态更新
+- [X] `[A]` 推送数据结构：`{type: "thought"|"action"|"observation"|"done"|"error", data: {...}}`
+- [X] `[C]` WebSocket 连接管理：心跳检测、断线重连、任务结束自动关闭
 
 ### 2.6 静态分析工具集成（成员 B，第2-5天）
 
