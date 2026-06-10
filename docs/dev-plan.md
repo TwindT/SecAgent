@@ -89,12 +89,12 @@
 
 ### 2.1 LLM API 封装（成员 A，第1-3天）
 
-- [ ] `[A]` 实现 `LLMClient` 类（同步调用）：传入 messages，返回 response
-- [ ] `[A]` 实现 `LLMClient` 类（流式调用）：传入 messages，yield 逐 token 返回
-- [ ] `[A]` 实现 Function Calling 支持：传入 tools 列表，解析返回的 tool_calls
-- [ ] `[A]` 实现错误处理：API 超时重试（3次）、Token 超限截断、网络异常兜底
-- [ ] `[A]` 实现 Token 计数器：估算每次调用的 Token 消耗
-- [ ] `[A]` 写单元测试：同步调用返回正确格式、流式调用能拿到完整结果
+- [X] `[A]` 实现 `LLMClient` 类（同步调用）：传入 messages，返回 response
+- [X] `[A]` 实现 `LLMClient` 类（流式调用）：传入 messages，yield 逐 token 返回
+- [X] `[A]` 实现 Function Calling 支持：传入 tools 列表，解析返回的 tool_calls
+- [X] `[A]` 实现错误处理：API 超时重试（3次）、Token 超限截断、网络异常兜底
+- [X] `[A]` 实现 Token 计数器：估算每次调用的 Token 消耗
+- [X] `[A]` 写单元测试：同步调用返回正确格式、流式调用能拿到完整结果
 
 ### 2.2 System Prompt 编写（成员 A，第1-2天）
 

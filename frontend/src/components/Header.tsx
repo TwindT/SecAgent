@@ -4,7 +4,6 @@ import Logo from './Logo';
 function Header() {
   return (
     <header
-      className="glass glass-border-bottom"
       style={{
         position: 'sticky',
         top: 0,
@@ -13,6 +12,7 @@ function Header() {
         padding: '0 24px',
         display: 'flex',
         alignItems: 'center',
+        background: 'transparent',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
