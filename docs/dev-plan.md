@@ -105,23 +105,23 @@
 
 ### 2.3 Function Calling Schema 定义（成员 A + B，第2-3天）
 
-- [ ] `[A]+[B]` 定义 `scan_code` 工具 Schema（代码静态扫描）
-- [ ] `[A]+[B]` 定义 `query_cve` 工具 Schema（CVE 漏洞库查询）
-- [ ] `[A]+[B]` 定义 `query_threat_intel` 工具 Schema（威胁情报查询）
-- [ ] `[A]+[B]` 定义 `extract_file_features` 工具 Schema（文件特征提取）
-- [ ] `[A]+[B]` 定义 `extract_iocs` 工具 Schema（IOC 提取）
-- [ ] `[A]+[B]` 定义 `map_attack` 工具 Schema（ATT&CK 技术映射）
-- [ ] `[A]` 将所有 Schema 注册到工具注册器（`ToolRegistry`）
+- [X] `[A]+[B]` 定义 `scan_code` 工具 Schema（代码静态扫描）
+- [X] `[A]+[B]` 定义 `query_cve` 工具 Schema（CVE 漏洞库查询）
+- [X] `[A]+[B]` 定义 `query_threat_intel` 工具 Schema（威胁情报查询）
+- [X] `[A]+[B]` 定义 `extract_file_features` 工具 Schema（文件特征提取）
+- [X] `[A]+[B]` 定义 `extract_iocs` 工具 Schema（IOC 提取）
+- [X] `[A]+[B]` 定义 `map_attack` 工具 Schema（ATT&CK 技术映射）
+- [X] `[A]` 将所有 Schema 注册到工具注册器（`ToolRegistry`）
 
 ### 2.4 ReAct 循环实现（成员 A，第3-5天）
 
-- [ ] `[A]` 实现 `AgentEngine` 类：接收任务，启动 ReAct 循环
-- [ ] `[A]` 实现 Thought 阶段：LLM 分析状态，输出推理文本
-- [ ] `[A]` 实现 Action 阶段：解析 LLM 的 tool_calls，调度工具执行
-- [ ] `[A]` 实现 Observe 阶段：将工具返回结果格式化后反馈给 LLM
-- [ ] `[A]` 实现循环控制：最多 10 步、单步超时 60s、重复动作检测
-- [ ] `[A]` 实现兜底逻辑：连续 3 步无进展 → 切换为标准分析流程
-- [ ] `[A]` 命令行 Demo：输入一段有漏洞的 Python 代码 → Agent 自动分析 → 打印结果
+- [X] `[A]` 实现 `AgentEngine` 类：接收任务，启动 ReAct 循环
+- [X] `[A]` 实现 Thought 阶段：LLM 分析状态，输出推理文本
+- [X] `[A]` 实现 Action 阶段：解析 LLM 的 tool_calls，调度工具执行
+- [X] `[A]` 实现 Observe 阶段：将工具返回结果格式化后反馈给 LLM
+- [X] `[A]` 实现循环控制：最多 10 步、单步超时 60s、重复动作检测
+- [X] `[A]` 实现兜底逻辑：连续 3 步无进展 → 切换为标准分析流程
+- [X] `[A]` 命令行 Demo：输入一段有漏洞的 Python 代码 → Agent 自动分析 → 打印结果
 
 ### 2.5 WebSocket 实时推送（成员 A + C，第4-5天）
 
