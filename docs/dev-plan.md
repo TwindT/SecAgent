@@ -98,10 +98,10 @@
 
 ### 2.2 System Prompt 编写（成员 A，第1-2天）
 
-- [ ] `[A]` 编写代码漏洞检测的 System Prompt（`backend/app/agent/prompts/code_audit.txt`）
-- [ ] `[A]` 编写恶意代码分析的 System Prompt（`backend/app/agent/prompts/malware_analysis.txt`）
-- [ ] `[A]` Prompt 包含：角色定位、工具清单及说明、输出格式要求、安全约束
-- [ ] `[A]` 用 2 个测试样本验证 Prompt 效果，调整至行为符合预期
+- [X] `[A]` 编写代码漏洞检测的 System Prompt（`backend/app/agent/prompts/code_audit.txt`）
+- [X] `[A]` 编写恶意代码分析的 System Prompt（`backend/app/agent/prompts/malware_analysis.txt`）
+- [X] `[A]` Prompt 包含：角色定位、工具清单及说明、输出格式要求、安全约束
+- [X] `[A]` 用 2 个测试样本验证 Prompt 效果，调整至行为符合预期
 
 ### 2.3 Function Calling Schema 定义（成员 A + B，第2-3天）
 
