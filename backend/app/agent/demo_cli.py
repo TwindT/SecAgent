@@ -5,11 +5,14 @@
 """
 import os
 import sys
+import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.agent.llm import LLMClient
 from app.agent.engine import AgentEngine
 from app.agent.schemas import tool_registry
+
+logger = logging.getLogger(__name__)
 
 # ==============================================================================
 # 模拟工具（模块 4 完成后替换为真实实现）
@@ -163,7 +166,17 @@ def mock_extract_iocs(text: str) -> dict:
 
 
 def mock_query_threat_intel(ioc_type: str, ioc_value: str) -> dict:
-    """模拟威胁情报查询。"""
+    """威胁情报查询 — 优先使用真实 OTX/URLhaus API，失败时降级为模拟数据。"""
+    try:
+        from app.tools.threat_intel import query_threat_intel
+        result = query_threat_intel(ioc_type=ioc_type, ioc_value=ioc_value)
+        if result.get("status") == "error":
+            logger.warning("威胁情报查询失败，降级为模拟: %s", result.get("error"))
+        else:
+            return result
+    except Exception as e:
+        logger.warning("威胁情报模块加载失败，使用模拟数据: %s", e)
+
     if "evil" in ioc_value.lower():
         return {
             "status": "ok",

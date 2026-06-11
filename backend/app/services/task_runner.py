@@ -25,6 +25,22 @@ from ..websocket import manager
 
 logger = logging.getLogger(__name__)
 
+# ------------------------------------------------------------------
+# 工具注册（将已实现的工具注入 Agent 引擎）
+# ------------------------------------------------------------------
+
+def _register_tools(engine: AgentEngine) -> None:
+    """将已实现的工具注册到引擎，替换占位 stub executor。"""
+    try:
+        from ..tools import scan_code, query_cve, query_cwe, query_threat_intel
+        engine.register_tool("scan_code", scan_code)
+        engine.register_tool("query_cve", query_cve)
+        engine.register_tool("query_cwe", query_cwe)
+        engine.register_tool("query_threat_intel", query_threat_intel)
+        logger.info("已注册 %d 个工具执行器", 4)
+    except Exception as e:
+        logger.warning("工具注册失败，将使用 stub executor: %s", e)
+
 
 def _make_ws_callback(task_id: str):
     """创建 WebSocket 推送回调闭包。
@@ -106,6 +122,9 @@ def run_task_sync(
         引擎完整分析结果。
     """
     engine = AgentEngine(llm=llm, max_steps=max_steps)
+
+    # 注册已实现的工具
+    _register_tools(engine)
 
     # 注入 WebSocket 回调
     engine.on_step(_make_ws_callback(task_id))

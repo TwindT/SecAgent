@@ -142,20 +142,20 @@
 
 ### 2.7 漏洞库查询工具（成员 B，第3-5天）
 
-- [ ] `[B]` 注册 NVD API Key（https://nvd.nist.gov/developers/request-an-api-key）
-- [ ] `[B]` 实现 `query_cve_by_id(cve_id)` 函数：查询单个 CVE 详情
-- [ ] `[B]` 实现 `query_cve_by_keyword(keyword)` 函数：按关键字搜索 CVE
-- [ ] `[B]` 实现 CWE 本地查询：`query_cwe(cwe_id)` → 返回名称+描述+缓解措施
-- [ ] `[B]` 实现 `query_cve` 工具入口函数：支持按 CVE ID 或关键字查询
-- [ ] `[B]` 写测试：查询 CVE-2021-44228 → 应返回 Log4Shell 详情
+- [X] `[B]` 注册 NVD API Key（https://nvd.nist.gov/developers/request-an-api-key）
+- [X] `[B]` 实现 `query_cve_by_id(cve_id)` 函数：查询单个 CVE 详情
+- [X] `[B]` 实现 `query_cve_by_keyword(keyword)` 函数：按关键字搜索 CVE
+- [X] `[B]` 实现 CWE 本地查询：`query_cwe(cwe_id)` → 返回名称+描述+缓解措施
+- [X] `[B]` 实现 `query_cve` 工具入口函数：支持按 CVE ID 或关键字查询
+- [X] `[B]` 写测试：查询 CVE-2021-44228 → 应返回 Log4Shell 详情
 
 ### 2.8 威胁情报查询工具（成员 B，第4-5天）
 
-- [ ] `[B]` 注册 AlienVault OTX API Key（免费）
-- [ ] `[B]` 实现 `query_otx_ip(ip)` / `query_otx_domain(domain)` / `query_otx_hash(hash)`
-- [ ] `[B]` 实现 `query_urlhaus(url)`：查询 URLhaus 恶意 URL 数据库
-- [ ] `[B]` 实现 `query_threat_intel` 工具入口函数：自动判断 IOC 类型并调用对应 API
-- [ ] `[B]` 实现 API 调用失败降级（返回本地缓存数据或"查询失败"提示）
+- [X] `[B]` 注册 AlienVault OTX API Key（免费）
+- [X] `[B]` 实现 `query_otx_ip(ip)` / `query_otx_domain(domain)` / `query_otx_hash(hash)`
+- [X] `[B]` 实现 `query_urlhaus(url)`：查询 URLhaus 恶意 URL 数据库
+- [X] `[B]` 实现 `query_threat_intel` 工具入口函数：自动判断 IOC 类型并调用对应 API
+- [X] `[B]` 实现 API 调用失败降级（返回本地缓存数据或"查询失败"提示）
 
 ---
 

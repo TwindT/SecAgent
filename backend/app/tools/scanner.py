@@ -24,13 +24,6 @@ _LANG_EXT = {
     "c": ".c",
 }
 
-_SEMGREP_LANG = {
-    "python": "python",
-    "java": "java",
-    "javascript": "javascript",
-    "c": "c",
-}
-
 
 def run_semgrep(code: str, language: str = "auto") -> dict:
     """对源代码执行 semgrep 静态安全扫描。
