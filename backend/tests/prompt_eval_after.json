@@ -1,0 +1,63 @@
+[
+  {
+    "sample_id": 1,
+    "sample_name": "已知漏洞代码 - Python SQL注入 + XSS",
+    "success": true,
+    "output_length": 1409,
+    "issues_found": [
+      "SQL 注入",
+      "XSS",
+      "命令注入",
+      "CWE-89",
+      "CWE-78"
+    ],
+    "issues_missed": [
+      "CWE-79"
+    ],
+    "false_positives": [],
+    "tool_calls": [],
+    "tool_count": 2,
+    "confidence": "high",
+    "confidence_score": 71,
+    "notes": []
+  },
+  {
+    "sample_id": 2,
+    "sample_name": "正常代码 - 安全编码实践",
+    "success": true,
+    "output_length": 937,
+    "issues_found": [],
+    "issues_missed": [],
+    "false_positives": [],
+    "tool_calls": [],
+    "tool_count": 1,
+    "confidence": "low",
+    "confidence_score": 28,
+    "notes": [
+      "潜在问题: 缺少代码行号/证据引用"
+    ]
+  },
+  {
+    "sample_id": 3,
+    "sample_name": "恶意脚本 - JS 信息窃取 + C2 通信",
+    "success": true,
+    "output_length": 1421,
+    "issues_found": [
+      "C2"
+    ],
+    "issues_missed": [
+      "窃取",
+      "键盘记录",
+      "keylogging",
+      "cookie",
+      "信息窃取",
+      "数据外传"
+    ],
+    "false_positives": [],
+    "tool_calls": [],
+    "tool_count": 8,
+    "confidence": "high",
+    "confidence_score": 100,
+    "notes": []
+  }
+]

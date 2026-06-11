@@ -1,0 +1,128 @@
+[
+  {
+    "sample_id": 1,
+    "sample_name": "Python SQL 注入",
+    "elapsed_seconds": 6.8,
+    "exit_code": 0,
+    "success": true,
+    "detected_type": "vulnerability_detection",
+    "type_correct": true,
+    "findings_matched": [
+      "CWE-89"
+    ],
+    "findings_missed": [
+      "SQL注入"
+    ],
+    "confidence_level": "medium",
+    "confidence_score": 67,
+    "total_steps": 0,
+    "token_total": 6614,
+    "token_prompt": 6101,
+    "token_completion": 513,
+    "token_calls": 3,
+    "error": null,
+    "notes": "漏检: ['SQL注入']; "
+  },
+  {
+    "sample_id": 2,
+    "sample_name": "Python 命令注入 + 硬编码密钥",
+    "elapsed_seconds": 8.5,
+    "exit_code": 0,
+    "success": true,
+    "detected_type": "vulnerability_detection",
+    "type_correct": true,
+    "findings_matched": [
+      "命令注入",
+      "CWE-78",
+      "硬编码",
+      "CWE-798"
+    ],
+    "findings_missed": [],
+    "confidence_level": "medium",
+    "confidence_score": 58,
+    "total_steps": 0,
+    "token_total": 4804,
+    "token_prompt": 4005,
+    "token_completion": 799,
+    "token_calls": 2,
+    "error": null,
+    "notes": ""
+  },
+  {
+    "sample_id": 3,
+    "sample_name": "JavaScript 信息窃取脚本",
+    "elapsed_seconds": 12.2,
+    "exit_code": 0,
+    "success": true,
+    "detected_type": "malware_analysis",
+    "type_correct": true,
+    "findings_matched": [
+      "窃取",
+      "WebSocket"
+    ],
+    "findings_missed": [
+      "C2通信",
+      "keylogging"
+    ],
+    "confidence_level": "high",
+    "confidence_score": 88,
+    "total_steps": 0,
+    "token_total": 19149,
+    "token_prompt": 18099,
+    "token_completion": 1050,
+    "token_calls": 6,
+    "error": null,
+    "notes": "漏检: ['C2通信', 'keylogging']; "
+  },
+  {
+    "sample_id": 4,
+    "sample_name": "PowerShell 远程下载执行",
+    "elapsed_seconds": 8.6,
+    "exit_code": 0,
+    "success": true,
+    "detected_type": "vulnerability_detection",
+    "type_correct": false,
+    "findings_matched": [
+      "下载",
+      "执行",
+      "powerShell"
+    ],
+    "findings_missed": [
+      "C2"
+    ],
+    "confidence_level": "medium",
+    "confidence_score": 61,
+    "total_steps": 0,
+    "token_total": 8985,
+    "token_prompt": 8349,
+    "token_completion": 636,
+    "token_calls": 4,
+    "error": null,
+    "notes": "类型错误: 期望malware_analysis, 得到vulnerability_detection; 漏检: ['C2']; "
+  },
+  {
+    "sample_id": 5,
+    "sample_name": "JavaScript XSS 漏洞",
+    "elapsed_seconds": 9.8,
+    "exit_code": 0,
+    "success": true,
+    "detected_type": "vulnerability_detection",
+    "type_correct": true,
+    "findings_matched": [
+      "XSS",
+      "innerHTML"
+    ],
+    "findings_missed": [
+      "CWE-79"
+    ],
+    "confidence_level": "low",
+    "confidence_score": 38,
+    "total_steps": 0,
+    "token_total": 4974,
+    "token_prompt": 4099,
+    "token_completion": 875,
+    "token_calls": 2,
+    "error": null,
+    "notes": "漏检: ['CWE-79']; "
+  }
+]

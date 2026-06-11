@@ -7,6 +7,7 @@ from .threat_intel import (
     query_urlhaus,
     query_threat_intel,
 )
+from .file_analysis import extract_file_features
 
 __all__ = [
     "run_semgrep",
@@ -21,4 +22,5 @@ __all__ = [
     "query_otx_hash",
     "query_urlhaus",
     "query_threat_intel",
+    "extract_file_features",
 ]

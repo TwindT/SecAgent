@@ -10,7 +10,7 @@ load_dotenv()
 API_KEY = os.getenv("DASHSCOPE_API_KEY")
 API_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-async def test_llm():
+async def run_llm_test():
     if not API_KEY:
         print("请先在 .env 文件中配置 DASHSCOPE_API_KEY")
         return
@@ -47,4 +47,4 @@ async def test_llm():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(test_llm())
+    asyncio.run(run_llm_test())

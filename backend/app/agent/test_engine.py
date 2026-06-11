@@ -326,14 +326,41 @@ def test_loop_control():
 
     # --- 10d: 兜底逻辑 ---
     engine2 = AgentEngine(llm=llm)
+    engine2.task_type = "vulnerability_detection"
     engine2.messages = [{"role": "user", "content": "test"}]
     engine2.steps = []
     engine2.step_count = 3
+
+    # 第 1 次 fallback → 应引导 scan_code（尚未调用）
     engine2._apply_fallback()
     assert len(engine2.messages) == 2
-    assert "System Prompt" in engine2.messages[-1]["content"]
+    assert "scan_code" in engine2.messages[-1]["content"]
     assert engine2._no_progress_count == 0
-    print(f"   [OK] 兜底消息已注入，_no_progress_count 已重置")
+    assert engine2._fallback_count == 1
+    print(f"   [OK] fallback #1 引导 scan_code")
+
+    # 第 2 次 fallback → 应要求跳过剩余工具直接输出
+    engine2._apply_fallback()
+    assert engine2._fallback_count == 2
+    assert "不要再调用任何工具" in engine2.messages[-1]["content"]
+    print(f"   [OK] fallback #2 要求跳过工具直接输出")
+
+    # 第 3 次 fallback → 最终强制输出
+    engine2._apply_fallback()
+    assert engine2._fallback_count == 3
+    assert "系统指令" in engine2.messages[-1]["content"] or "强制指令" in engine2.messages[-1]["content"]
+    print(f"   [OK] fallback #3 最终强制输出")
+
+    # 验证 _get_called_tools
+    engine3 = AgentEngine(llm=llm)
+    engine3.messages = [
+        {"role": "user", "content": "test"},
+        {"role": "tool", "tool_call_id": "c1", "name": "scan_code", "content": '{"findings": []}'},
+        {"role": "tool", "tool_call_id": "c2", "name": "query_cwe", "content": '{"id": "CWE-89"}'},
+    ]
+    called = engine3._get_called_tools()
+    assert called == {"scan_code", "query_cwe"}
+    print(f"   [OK] _get_called_tools 正确: {called}")
 
     # --- 10e: 步数上限 ---
     engine3 = AgentEngine(llm=llm, max_steps=3)
