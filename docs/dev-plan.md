@@ -132,13 +132,13 @@
 
 ### 2.6 静态分析工具集成（成员 B，第2-5天）
 
-- [ ] `[B]` 安装并验证 semgrep CLI 可用：`semgrep --version`
-- [ ] `[B]` 实现 `run_semgrep(code, language)` 函数：写入临时文件 → semgrep 扫描 → 解析 JSON 输出
-- [ ] `[B]` 安装并验证 bandit CLI 可用：`bandit --version`
-- [ ] `[B]` 实现 `run_bandit(code)` 函数（仅 Python 代码）
-- [ ] `[B]` 实现扫描结果标准化：统一为 `{rule_id, severity, file, line, message, code_snippet}` 格式
-- [ ] `[B]` 实现 `scan_code` 工具入口函数：根据 language 参数分发到 semgrep/bandit
-- [ ] `[B]` 写测试：扫描含 SQL 注入的 Python 代码 → semgrep 应检出
+- [X] `[B]` 安装并验证 semgrep CLI 可用：`semgrep --version`
+- [X] `[B]` 实现 `run_semgrep(code, language)` 函数：写入临时文件 → semgrep 扫描 → 解析 JSON 输出
+- [X] `[B]` 安装并验证 bandit CLI 可用：`bandit --version`
+- [X] `[B]` 实现 `run_bandit(code)` 函数（仅 Python 代码）
+- [X] `[B]` 实现扫描结果标准化：统一为 `{rule_id, severity, file, line, message, code_snippet}` 格式
+- [X] `[B]` 实现 `scan_code` 工具入口函数：根据 language 参数分发到 semgrep/bandit
+- [X] `[B]` 写测试：扫描含 SQL 注入的 Python 代码 → semgrep 应检出
 
 ### 2.7 漏洞库查询工具（成员 B，第3-5天）
 
