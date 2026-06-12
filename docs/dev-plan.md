@@ -194,43 +194,43 @@
 
 ### 3.4 IOC 提取 + ATT&CK 映射工具（成员 B，第2-4天）
 
-- [ ] `[B]` 实现正则 IOC 提取：IPv4、域名、URL、MD5/SHA1/SHA256 Hash
-- [ ] `[B]` 实现 `extract_iocs` 工具入口函数：输入文本 → 返回分类 IOC 列表
-- [ ] `[B]` 实现 ATT&CK 技术映射：根据恶意行为关键词匹配 ATT&CK 技术 ID
-- [ ] `[B]` 实现 `map_attack` 工具入口函数：输入行为描述 → 返回技术 ID+战术+名称
-- [ ] `[B]` 写测试：输入"credential dumping"→ 应匹配到 T1003
+- [X] `[B]` 实现正则 IOC 提取：IPv4、域名、URL、MD5/SHA1/SHA256 Hash
+- [X] `[B]` 实现 `extract_iocs` 工具入口函数：输入文本 → 返回分类 IOC 列表
+- [X] `[B]` 实现 ATT&CK 技术映射：根据恶意行为关键词匹配 ATT&CK 技术 ID
+- [X] `[B]` 实现 `map_attack` 工具入口函数：输入行为描述 → 返回技术 ID+战术+名称
+- [X] `[B]` 写测试：输入"credential dumping"→ 应匹配到 T1003
 
 ### 3.5 YARA 规则集成（成员 B，第3-4天）
 
-- [ ] `[B]` 准备 10+ 条常用 YARA 规则（覆盖常见恶意家族）
-- [ ] `[B]` 实现 `scan_yara(file_path)` 函数：加载规则 → 扫描文件 → 返回匹配规则
-- [ ] `[B]` 将 YARA 扫描集成到 `extract_file_features` 中作为子功能
-- [ ] `[B]` 写测试：用已知恶意样本的 Hash 验证 YARA 规则可编译通过
+- [X] `[B]` 准备 10+ 条常用 YARA 规则（覆盖常见恶意家族）
+- [X] `[B]` 实现 `scan_yara(file_path)` 函数：加载规则 → 扫描文件 → 返回匹配规则
+- [X] `[B]` 将 YARA 扫描集成到 `extract_file_features` 中作为子功能
+- [X] `[B]` 写测试：用已知恶意样本的 Hash 验证 YARA 规则可编译通过
 
 ### 3.6 工具层整体联调（成员 B，第4-5天）
 
-- [ ] `[B]` 确保所有工具入口函数签名统一：`tool_name(**params) -> dict`
-- [ ] `[B]` 确保所有工具返回格式符合约定的 Tool Schema
-- [ ] `[B]` 编写工具层集成测试：模拟 Agent 依次调用所有工具
-- [ ] `[B]` 与成员 A 联调：Agent 通过 Function Calling 调用 B 的工具确认可正常返回
+- [X] `[B]` 确保所有工具入口函数签名统一：`tool_name(**params) -> dict`
+- [X] `[B]` 确保所有工具返回格式符合约定的 Tool Schema
+- [X] `[B]` 编写工具层集成测试：模拟 Agent 依次调用所有工具
+- [X] `[B]` 与成员 A 联调：Agent 通过 Function Calling 调用 B 的工具确认可正常返回
 
 ### 3.7 后端 API 开发（成员 C，第2-5天）
 
-- [ ] `[C]` 实现 `POST /api/tasks`：创建分析任务，存入数据库，返回 task_id
-- [ ] `[C]` 实现 `GET /api/tasks/{task_id}`：查询任务状态和结果
-- [ ] `[C]` 实现 `GET /api/tasks`：查询历史任务列表（支持分页+筛选）
-- [ ] `[C]` 实现 `POST /api/tasks/{task_id}/chat`：发送追问消息，返回 Agent 回复
-- [ ] `[C]` 实现 `GET /api/tasks/{task_id}/report/pdf`：触发 PDF 报告生成并下载
-- [ ] `[C]` 实现文件上传端点：`POST /api/upload`（类型检查+大小限制+临时存储）
-- [ ] `[C]` 实现 API 层安全措施：CORS 配置、输入验证（Pydantic）、速率限制
+- [X] `[C]` 实现 `POST /api/tasks`：创建分析任务，存入数据库，返回 task_id
+- [X] `[C]` 实现 `GET /api/tasks/{task_id}`：查询任务状态和结果
+- [X] `[C]` 实现 `GET /api/tasks`：查询历史任务列表（支持分页+筛选）
+- [X] `[C]` 实现 `POST /api/tasks/{task_id}/chat`：发送追问消息，返回 Agent 回复
+- [X] `[C]` 实现 `GET /api/tasks/{task_id}/report/pdf`：触发 PDF 报告生成并下载
+- [X] `[C]` 实现文件上传端点：`POST /api/upload`（类型检查+大小限制+临时存储）
+- [X] `[C]` 实现 API 层安全措施：CORS 配置、输入验证（Pydantic）、速率限制
 
 ### 3.8 报告生成引擎（成员 C，第4-5天）
 
-- [ ] `[C]` 设计 Markdown 报告模板（漏洞检测版）：`backend/app/report/templates/vuln_report.md`
-- [ ] `[C]` 设计 Markdown 报告模板（恶意分析版）：`backend/app/report/templates/malware_report.md`
-- [ ] `[C]` 实现报告渲染函数：将分析结果 JSON 填入模板 → 生成 Markdown 文本
-- [ ] `[C]` 实现 PDF 导出：使用 WeasyPrint 或 ReportLab 将 Markdown 转 PDF
-- [ ] `[C]` 测试：提交一个分析结果 JSON → 生成完整 Markdown 报告和 PDF
+- [X] `[C]` 设计 Markdown 报告模板（漏洞检测版）：`backend/app/report/templates/vuln_report.md`
+- [X] `[C]` 设计 Markdown 报告模板（恶意分析版）：`backend/app/report/templates/malware_report.md`
+- [X] `[C]` 实现报告渲染函数：将分析结果 JSON 填入模板 → 生成 Markdown 文本
+- [X] `[C]` 实现 PDF 导出：使用 WeasyPrint 或 ReportLab 将 Markdown 转 PDF
+- [X] `[C]` 测试：提交一个分析结果 JSON → 生成完整 Markdown 报告和 PDF
 
 ---
 

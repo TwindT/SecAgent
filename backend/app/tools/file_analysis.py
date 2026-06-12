@@ -669,6 +669,10 @@ def extract_file_features(file_path: str) -> dict:
         strings = _extract_strings(file_path, min_length=4)
         classified_strings = _classify_strings(strings)
 
+        # YARA 规则扫描（所有文件通用）
+        from .yara_scanner import scan_yara
+        yara_scan = scan_yara(file_path)
+
         return {
             "status": "ok",
             "data": {
@@ -680,6 +684,7 @@ def extract_file_features(file_path: str) -> dict:
                 "type_info": type_info,
                 "pe_info": pe_info,
                 "office_info": office_info,
+                "yara_scan": yara_scan,
                 "strings": classified_strings,
             },
             "error": None,

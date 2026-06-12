@@ -24,8 +24,8 @@ class Task(Base):
     __tablename__ = "task"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    type = Column(Enum(TaskType), nullable=False)
-    status = Column(Enum(TaskStatus), nullable=False, default=TaskStatus.PENDING)
+    type = Column(Enum(TaskType, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    status = Column(Enum(TaskStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=TaskStatus.PENDING)
     input_path = Column(String(500))
     input_content = Column(Text)
     result_json = Column(Text)
@@ -53,7 +53,7 @@ class Conversation(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(Integer, ForeignKey("task.id"), nullable=False)
-    role = Column(Enum(ConversationRole), nullable=False)
+    role = Column(Enum(ConversationRole, values_callable=lambda x: [e.value for e in x]), nullable=False)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     

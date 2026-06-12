@@ -8,6 +8,9 @@ from .threat_intel import (
     query_threat_intel,
 )
 from .file_analysis import extract_file_features
+from .ioc_extractor import extract_iocs
+from .attack_mapper import map_attack
+from .yara_scanner import scan_yara
 
 __all__ = [
     "run_semgrep",
@@ -23,4 +26,7 @@ __all__ = [
     "query_urlhaus",
     "query_threat_intel",
     "extract_file_features",
+    "extract_iocs",
+    "map_attack",
+    "scan_yara",
 ]

@@ -32,12 +32,15 @@ logger = logging.getLogger(__name__)
 def _register_tools(engine: AgentEngine) -> None:
     """将已实现的工具注册到引擎，替换占位 stub executor。"""
     try:
-        from ..tools import scan_code, query_cve, query_cwe, query_threat_intel
+        from ..tools import scan_code, query_cve, query_cwe, query_threat_intel, extract_iocs, map_attack, scan_yara
         engine.register_tool("scan_code", scan_code)
         engine.register_tool("query_cve", query_cve)
         engine.register_tool("query_cwe", query_cwe)
         engine.register_tool("query_threat_intel", query_threat_intel)
-        logger.info("已注册 %d 个工具执行器", 4)
+        engine.register_tool("extract_iocs", extract_iocs)
+        engine.register_tool("map_attack", map_attack)
+        engine.register_tool("scan_yara", scan_yara)
+        logger.info("已注册 %d 个工具执行器", 7)
     except Exception as e:
         logger.warning("工具注册失败，将使用 stub executor: %s", e)
 

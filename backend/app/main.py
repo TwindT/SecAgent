@@ -1,22 +1,50 @@
 import logging
+import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .api import tasks_router, upload_router
+from .middleware import RateLimitMiddleware
+from .models import init_db
 from .websocket import manager
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# CORS 允许的来源，通过环境变量可配置，默认全允许（开发模式）
+ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+
 app = FastAPI(title="SecAgent API", version="1.0")
 
+# CORS 中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 速率限制中间件（每 IP 每分钟最多 60 次请求），跳过 WebSocket
+app.add_middleware(
+    RateLimitMiddleware,
+    max_requests=int(os.getenv("RATE_LIMIT_MAX", "60")),
+    window=int(os.getenv("RATE_LIMIT_WINDOW", "60")),
+)
+
+app.include_router(tasks_router)
+app.include_router(upload_router)
+
+
+@app.on_event("startup")
+def on_startup():
+    database_url = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+    init_db(database_url)
+    logger.info("数据库已初始化: %s", database_url)
 
 
 @app.get("/")
@@ -27,11 +55,6 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-
-@app.post("/api/tasks")
-async def create_task():
-    return {"task_id": "task-001", "status": "pending"}
 
 
 # ---------------------------------------------------------------------------
