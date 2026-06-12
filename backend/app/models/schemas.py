@@ -29,19 +29,6 @@ class CreateTaskResponse(BaseModel):
     task_id: int
     message: str = "Task created successfully"
 
-class TaskResponse(BaseModel):
-    id: int
-    type: str
-    status: str
-    input_path: Optional[str]
-    input_content: Optional[str]
-    result_json: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-    
-    class Config:
-        from_attributes = True
-
 class AnalysisStepResponse(BaseModel):
     id: int
     task_id: int
@@ -50,7 +37,21 @@ class AnalysisStepResponse(BaseModel):
     action: Optional[str]
     observation: Optional[str]
     created_at: datetime
-    
+
+    class Config:
+        from_attributes = True
+
+class TaskResponse(BaseModel):
+    id: int
+    type: str
+    status: str
+    input_path: Optional[str]
+    input_content: Optional[str]
+    result_json: Optional[str]
+    analysis_steps: Optional[List[AnalysisStepResponse]] = None
+    created_at: datetime
+    updated_at: datetime
+
     class Config:
         from_attributes = True
 

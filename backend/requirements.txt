@@ -17,3 +17,5 @@ python-dotenv>=1.0.0
 semgrep>=1.165.0
 bandit>=1.7.0
 xhtml2pdf>=0.2.0
+celery>=5.3.0
+redis>=5.0.0

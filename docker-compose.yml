@@ -39,6 +39,28 @@ services:
       timeout: 10s
       retries: 3
 
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: secagent-celery
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=3
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./app.db
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+    volumes:
+      - ./backend:/app
+      - backend-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - secagent-network
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend

@@ -431,7 +431,9 @@ class AgentEngine:
                             "description": cve.get("description", ""),
                         })
 
-        return findings
+        # 按严重度/置信度智能排序（惰性导入避免循环依赖）
+        from ..services.sorting import sort_findings as _sort
+        return _sort(findings)
 
     def _aggregate_malware(self, tool_results: list[dict]) -> dict:
         """聚合恶意分析结果：提取文件特征、IOC、威胁情报、ATT&CK、YARA。"""

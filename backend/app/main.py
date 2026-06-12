@@ -46,6 +46,11 @@ def on_startup():
     init_db(database_url)
     logger.info("数据库已初始化: %s", database_url)
 
+    # 清理上次运行残留的临时文件
+    from .services.cleanup import ensure_clean_dirs
+    ensure_clean_dirs()
+    logger.info("临时目录已就绪")
+
 
 @app.get("/")
 async def root():

@@ -2,7 +2,6 @@
 
 import json
 import logging
-import threading
 
 from typing import Optional
 
@@ -15,8 +14,6 @@ from ..models import (
     Task,
     TaskType,
     TaskStatus,
-    Conversation,
-    ConversationRole,
     CreateTaskRequest,
     CreateTaskResponse,
     TaskResponse,
@@ -26,60 +23,27 @@ from ..models import (
     TaskTypeEnum,
     TaskStatusEnum,
     AnalysisStepResponse,
-    ConversationResponse,
 )
 from ..report import generate_pdf, render_markdown
-from ..services import run_task_sync
+from ..services.conversation import ConversationManager
+from ..services.task_queue import submit_task, load_steps, get_queue_status as _get_queue_status
 from ..agent.llm import LLMClient
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
+# 全局对话管理器实例
+conv_manager = ConversationManager()
 
-def _run_analysis(task_id: int, task_type: str, input_content: str):
-    """在后台线程中执行分析任务并更新数据库状态。"""
-    from ..models.database import SessionLocal, Task as TaskModel, TaskStatus as TS
 
-    db = SessionLocal()
-    try:
-        task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
-        if not task:
-            return
-
-        task.status = TS.ANALYZING
-        db.commit()
-
-        llm = LLMClient()
-        result = run_task_sync(
-            task_id=str(task_id),
-            task_type=task_type,
-            input_content=input_content or "",
-            llm=llm,
-        )
-
-        task.status = TS.DONE
-        task.result_json = json.dumps(result, ensure_ascii=False, default=str)
-        db.commit()
-        logger.info("任务 %d 执行完成", task_id)
-
-    except Exception as e:
-        logger.exception("任务 %d 执行失败", task_id)
-        try:
-            task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
-            if task:
-                task.status = TS.FAILED
-                task.result_json = json.dumps({"error": str(e)}, ensure_ascii=False)
-                db.commit()
-        except Exception:
-            pass
-    finally:
-        db.close()
-
+# ============================================================================
+# 任务 CRUD
+# ============================================================================
 
 @router.post("", response_model=CreateTaskResponse)
 def create_task(req: CreateTaskRequest, db: Session = Depends(get_db)):
-    """创建分析任务，存入数据库，启动后台分析，返回 task_id。"""
+    """创建分析任务，存入数据库，通过任务队列异步执行，返回 task_id。"""
     task = Task(
         type=TaskType(req.type.value),
         status=TaskStatus.PENDING,
@@ -90,13 +54,12 @@ def create_task(req: CreateTaskRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(task)
 
-    # 启动后台分析线程
-    thread = threading.Thread(
-        target=_run_analysis,
-        args=(task.id, req.type.value, req.input_content or ""),
-        daemon=True,
+    # 通过 Celery + Redis 任务队列提交（worker 并发数 3）
+    submit_task(
+        task_id=task.id,
+        task_type=req.type.value,
+        input_content=req.input_content or "",
     )
-    thread.start()
 
     return CreateTaskResponse(task_id=task.id)
 
@@ -128,14 +91,74 @@ def list_tasks(
     return TaskListResponse(total=total, tasks=tasks)
 
 
+# ============================================================================
+# 队列状态（必须在 /{task_id} 之前注册，避免 "queue" 被当作 task_id）
+# ============================================================================
+
+@router.get("/queue/status")
+def queue_status_endpoint():
+    """查询任务队列状态：等待中、分析中任务数、最大并发数。"""
+    return _get_queue_status()
+
+
+# ============================================================================
+# 任务详情 + 分析步骤
+# ============================================================================
+
 @router.get("/{task_id}", response_model=TaskResponse)
 def get_task(task_id: int, db: Session = Depends(get_db)):
-    """查询单个任务的状态、结果和分析步骤。"""
+    """查询单个任务的状态、结果和已完成的分析步骤。"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
+    # 加载分析步骤（实时反映当前进度）
+    if task.analysis_steps is None:
+        task.analysis_steps = []
     return task
 
+
+@router.get("/{task_id}/steps", response_model=list[AnalysisStepResponse])
+def get_task_steps(task_id: int, db: Session = Depends(get_db)):
+    """查询指定任务的所有分析步骤（Thought → Action → Observe 链）。"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
+    # 从 DB 加载持久化的步骤
+    steps = load_steps(task_id)
+
+    # 如果 DB 中无记录，尝试从 result_json 中的 steps 提取（兼容旧任务）
+    if not steps and task.result_json:
+        try:
+            result = json.loads(task.result_json)
+            raw_steps = result.get("steps", [])
+            for s in raw_steps:
+                data = s.get("data", {})
+                step_num = s.get("step_num", 0)
+                step_type = s.get("type", "")
+                step = {
+                    "id": 0,
+                    "task_id": task_id,
+                    "step_num": step_num,
+                    "created_at": data.get("timestamp", ""),
+                }
+                if step_type == "thought":
+                    step["thought"] = json.dumps(data, ensure_ascii=False)[:2000]
+                elif step_type == "action":
+                    step["action"] = json.dumps(data, ensure_ascii=False)[:2000]
+                else:
+                    step["observation"] = json.dumps(data, ensure_ascii=False)[:2000]
+                steps.append(step)
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+
+    return steps
+
+
+# ============================================================================
+# 对话追问
+# ============================================================================
 
 @router.post("/{task_id}/chat", response_model=SendMessageResponse)
 def chat_with_task(
@@ -143,61 +166,55 @@ def chat_with_task(
     req: SendMessageRequest,
     db: Session = Depends(get_db),
 ):
-    """对已完成的分析任务发送追问，Agent 基于分析上下文回复。"""
+    """对已完成的分析任务发送追问，Agent 基于分析上下文回复。
+
+    使用 ConversationManager 管理对话历史和上下文窗口。
+    """
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
-    # 存储用户消息
-    user_msg = Conversation(
-        task_id=task_id,
-        role=ConversationRole.USER,
-        content=req.message,
-    )
-    db.add(user_msg)
-    db.commit()
+    # 1. 存储用户消息
+    conv_manager.add_message(task_id, "user", req.message)
 
-    # 构建对话上下文
-    history = (
-        db.query(Conversation)
-        .filter(Conversation.task_id == task_id)
-        .order_by(Conversation.created_at.asc())
-        .all()
-    )
+    # 2. 加载历史对话
+    history = conv_manager.load_history_as_messages(task_id)
 
-    system_prompt = (
-        "你是一名资深安全分析专家。用户正在对一份已完成的安全分析报告进行追问。"
-        "请基于分析结果简洁专业地回答用户的问题。"
-    )
-
-    messages = [{"role": "system", "content": system_prompt}]
-
+    # 3. 构建 system prompts
+    system_prompts = [
+        (
+            "你是一名资深安全分析专家。用户正在对一份已完成的安全分析报告进行追问。"
+            "请基于分析结果简洁专业地回答用户的问题。"
+        ),
+    ]
     if task.result_json:
-        messages.append({
-            "role": "system",
-            "content": f"以下是已完成的分析结果供参考：\n{task.result_json}",
-        })
+        system_prompts.append(
+            f"以下是已完成的分析结果供参考：\n{task.result_json}"
+        )
 
-    for msg in history:
-        role = "user" if msg.role == ConversationRole.USER else "assistant"
-        messages.append({"role": role, "content": msg.content})
+    # 4. 上下文窗口管理：截断过长历史后构建最终消息列表
+    messages = conv_manager.build_context_messages(system_prompts, history)
 
-    # 调用 LLM
+    logger.info(
+        "对话上下文构建完成: task_id=%d system_msgs=%d history_msgs=%d total_tokens=%d",
+        task_id, len(system_prompts), len(history),
+        conv_manager.estimate_total_tokens(messages),
+    )
+
+    # 5. 调用 LLM
     llm = LLMClient()
     result = llm.chat(messages=messages)
     reply_text = result.get("content") or result.get("error", "无法生成回复")
 
-    # 存储助手回复
-    assistant_msg = Conversation(
-        task_id=task_id,
-        role=ConversationRole.ASSISTANT,
-        content=reply_text,
-    )
-    db.add(assistant_msg)
-    db.commit()
+    # 6. 存储助手回复
+    conv_manager.add_message(task_id, "assistant", reply_text)
 
     return SendMessageResponse(reply=reply_text, task_id=task_id)
 
+
+# ============================================================================
+# 报告导出
+# ============================================================================
 
 @router.get("/{task_id}/report/pdf")
 def download_report_pdf(task_id: int, db: Session = Depends(get_db)):

@@ -17,7 +17,7 @@ WebSocket 推送消息格式（符合 2.5 约定）：
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 
 from ..agent.engine import AgentEngine
 from ..agent.llm import LLMClient
@@ -103,6 +103,7 @@ def run_task_sync(
     input_content: str,
     llm: Optional[LLMClient] = None,
     max_steps: int = 10,
+    on_step_callback: Optional[Callable[[dict], None]] = None,
 ) -> dict:
     """同步执行分析任务并实时推送过程到 WebSocket。
 
@@ -118,6 +119,8 @@ def run_task_sync(
         复用 LLM 客户端，为 None 时自动创建。
     max_steps : int
         最大 ReAct 步数。
+    on_step_callback : Callable | None
+        额外的步骤回调（如 DB 存储），与 WebSocket 推送并行调用。
 
     Returns
     -------
@@ -130,7 +133,18 @@ def run_task_sync(
     _register_tools(engine)
 
     # 注入 WebSocket 回调
-    engine.on_step(_make_ws_callback(task_id))
+    ws_cb = _make_ws_callback(task_id)
+
+    def combined_callback(step: dict) -> None:
+        """同时触发 WebSocket 推送和额外的步骤回调。"""
+        ws_cb(step)
+        if on_step_callback:
+            try:
+                on_step_callback(step)
+            except Exception as e:
+                logger.warning("额外步骤回调异常: %s", e)
+
+    engine.on_step(combined_callback)
 
     logger.info("开始执行任务: task_id=%s type=%s", task_id, task_type)
 

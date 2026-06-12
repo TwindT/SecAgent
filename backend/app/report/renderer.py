@@ -4,10 +4,25 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
+
+from ..services.summarizer import generate_summary
+from ..services.sorting import sort_findings
 
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def _fmt_confidence(conf) -> str:
+    """将置信度（可能是 dict 或字符串）统一转为可读字符串。"""
+    if isinstance(conf, dict):
+        level = conf.get("level", "?")
+        score = conf.get("score", conf.get("max_score", ""))
+        if score:
+            return f"{level} ({score}/100)"
+        return str(level)
+    return str(conf) if conf else "-"
 
 # 漏洞检测默认评分（后续由 Agent 实际填充）
 DEFAULT_SCORES = {
@@ -60,6 +75,9 @@ def _build_vuln_context(task, result: dict) -> dict:
     """构建漏洞检测报告的模板上下文。"""
     summary_data = result.get("summary", {})
     findings = result.get("findings", result.get("vulnerabilities", []))
+    # 智能排序：高危 → 中危 → 低危，同等级按置信度降序
+    if isinstance(findings, list) and findings:
+        findings = sort_findings(findings)
     suggestions = result.get("suggestions", result.get("recommendations", []))
 
     # 风险等级映射
@@ -115,8 +133,8 @@ def _build_vuln_context(task, result: dict) -> dict:
         "created_at": task.created_at.strftime("%Y-%m-%d %H:%M:%S") if task.created_at else "-",
         "elapsed": f"{result.get('elapsed_seconds', '-')} 秒",
         "risk_level": risk_level,
-        "confidence": summary_data.get("confidence", str(result.get("confidence", "-"))),
-        "summary": summary_data.get("overview", summary_data.get("description", "暂无分析摘要。")),
+        "confidence": _fmt_confidence(summary_data.get("confidence", result.get("confidence", "-"))),
+        "summary": _get_ai_summary(task, result),
         "findings": findings_md,
         "suggestions": sug_md,
         "references": ref_md,
@@ -203,9 +221,9 @@ def _build_malware_context(task, result: dict) -> dict:
         "created_at": task.created_at.strftime("%Y-%m-%d %H:%M:%S") if task.created_at else "-",
         "elapsed": f"{result.get('elapsed_seconds', '-')} 秒",
         "verdict": verdict,
-        "confidence": str(result.get("confidence", summary_data.get("confidence", "-"))),
+        "confidence": _fmt_confidence(result.get("confidence", summary_data.get("confidence", "-"))),
         "malicious_level": malicious_level,
-        "summary": summary_data.get("overview", summary_data.get("description", "暂无分析摘要。")),
+        "summary": _get_ai_summary(task, result),
         "behaviors": behavior_md,
         "attack_mapping": attack_md,
         "ioc_table": ioc_table,
@@ -218,6 +236,32 @@ def _build_malware_context(task, result: dict) -> dict:
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
     }
     return ctx
+
+
+def _get_ai_summary(task, result: dict) -> str:
+    """获取 AI 生成的摘要，失败时回退到规则提取。
+
+    将 result_json 原样传给 summarizer，由其内部提取关键字段。
+    """
+    task_type = getattr(task.type, "value", str(task.type)) or ""
+
+    try:
+        summary = generate_summary(
+            result_json=task.result_json,
+            task_type=task_type,
+        )
+        if summary and summary != "暂无分析摘要。":
+            return summary
+    except Exception as e:
+        logger.warning("AI 摘要生成失败，使用 fallback: %s", e)
+
+    # fallback：从 result dict 直接提取
+    summary_data = result.get("summary", {}) if isinstance(result, dict) else {}
+    return str(
+        summary_data.get("overview", summary_data.get("description", "暂无分析摘要。"))
+        if isinstance(summary_data, dict)
+        else "暂无分析摘要。"
+    )
 
 
 def render_markdown(task) -> str:
