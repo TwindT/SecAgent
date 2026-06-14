@@ -13,8 +13,12 @@
     "@ant-design/icons": "^6.2.5",
     "antd": "^6.4.3",
     "axios": "^1.17.0",
+    "dayjs": "^1.11.21",
+    "lucide-react": "^1.18.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.17.0",
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
