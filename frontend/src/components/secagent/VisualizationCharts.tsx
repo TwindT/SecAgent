@@ -18,34 +18,6 @@ import {
   Tooltip,
 } from 'recharts'
 
-// ─── Risk Radar Chart Data ──────────────────────────
-const radarData = [
-  { dimension: '代码质量', score: 72, fullMark: 100 },
-  { dimension: '认证安全', score: 45, fullMark: 100 },
-  { dimension: '授权控制', score: 68, fullMark: 100 },
-  { dimension: '数据保护', score: 55, fullMark: 100 },
-  { dimension: '加密安全', score: 80, fullMark: 100 },
-  { dimension: '日志审计', score: 38, fullMark: 100 },
-]
-
-// ─── Vulnerability Type Distribution (Donut) ────────
-const vulnTypeData = [
-  { name: 'SQL 注入', value: 8, color: '#EF4444' },
-  { name: 'XSS', value: 5, color: '#5BA3FF' },
-  { name: '命令注入', value: 3, color: '#F59E0B' },
-  { name: '路径遍历', value: 2, color: '#5EEAD4' },
-  { name: '硬编码密钥', value: 4, color: '#10B981' },
-  { name: 'CSRF', value: 1, color: '#94A3B8' },
-]
-
-// ─── Severity Distribution (Bar) ────────────────────
-const severityData = [
-  { name: '高危', count: 7, fill: '#EF4444' },
-  { name: '中危', count: 15, fill: '#F59E0B' },
-  { name: '低危', count: 23, fill: '#10B981' },
-  { name: '信息', count: 41, fill: '#94A3B8' },
-]
-
 // ─── Custom Tooltip ─────────────────────────────────
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color?: string }>; label?: string }) {
   if (!active || !payload || payload.length === 0) return null
@@ -85,7 +57,12 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 }
 
 // ─── Risk Radar Chart Component ─────────────────────
-export function RiskRadarChart() {
+interface RiskRadarChartProps {
+  data: Array<{ dimension: string; score: number; fullMark?: number }>
+}
+
+export function RiskRadarChart({ data }: RiskRadarChartProps) {
+  const hasData = data && data.length > 0
   return (
     <div
       style={{
@@ -115,81 +92,109 @@ export function RiskRadarChart() {
       >
         多维度安全评分概览
       </p>
-      <ResponsiveContainer width="100%" height={280}>
-        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-          <PolarGrid
-            stroke="rgba(148,163,184,0.12)"
-            strokeDasharray="3 3"
-          />
-          <PolarAngleAxis
-            dataKey="dimension"
-            tick={{
-              fill: '#64748B',
-              fontSize: 11,
-              fontWeight: 500,
-            }}
-          />
-          <PolarRadiusAxis
-            angle={90}
-            domain={[0, 100]}
-            tick={{
-              fill: '#94A3B8',
-              fontSize: 9,
-            }}
-            axisLine={false}
-          />
-          <Radar
-            name="安全评分"
-            dataKey="score"
-            stroke="#5BA3FF"
-            fill="#5BA3FF"
-            fillOpacity={0.15}
-            strokeWidth={2}
-          />
-        </RadarChart>
-      </ResponsiveContainer>
-      {/* Score indicators below */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '8px' }}>
-        {radarData.map((item) => (
-          <div
-            key={item.dimension}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderRadius: '8px',
-              padding: '6px 10px',
-              background: 'rgba(148,163,184,0.04)',
-            }}
-          >
-            <span
-              style={{ fontSize: '10px', color: 'var(--text-secondary)' }}
-            >
-              {item.dimension}
-            </span>
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 600,
-                color:
-                  item.score >= 70
-                    ? '#10B981'
-                    : item.score >= 50
-                    ? '#F59E0B'
-                    : '#EF4444',
-              }}
-            >
-              {item.score}
-            </span>
+      {hasData ? (
+        <>
+          <ResponsiveContainer width="100%" height={280}>
+            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
+              <PolarGrid
+                stroke="rgba(148,163,184,0.12)"
+                strokeDasharray="3 3"
+              />
+              <PolarAngleAxis
+                dataKey="dimension"
+                tick={{
+                  fill: '#64748B',
+                  fontSize: 11,
+                  fontWeight: 500,
+                }}
+              />
+              <PolarRadiusAxis
+                angle={90}
+                domain={[0, 100]}
+                tick={{
+                  fill: '#94A3B8',
+                  fontSize: 9,
+                }}
+                axisLine={false}
+              />
+              <Radar
+                name="安全评分"
+                dataKey="score"
+                stroke="#5BA3FF"
+                fill="#5BA3FF"
+                fillOpacity={0.15}
+                strokeWidth={2}
+              />
+            </RadarChart>
+          </ResponsiveContainer>
+          {/* Score indicators below */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '8px' }}>
+            {data.map((item) => (
+              <div
+                key={item.dimension}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  background: 'rgba(148,163,184,0.04)',
+                }}
+              >
+                <span
+                  style={{ fontSize: '10px', color: 'var(--text-secondary)' }}
+                >
+                  {item.dimension}
+                </span>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    color:
+                      item.score >= 70
+                        ? '#10B981'
+                        : item.score >= 50
+                        ? '#F59E0B'
+                        : '#EF4444',
+                  }}
+                >
+                  {item.score}
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 280,
+            color: 'var(--text-muted)',
+          }}
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '12px', opacity: 0.4 }}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+          </svg>
+          <span style={{ fontSize: '13px' }}>暂无数据</span>
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── Vulnerability Type Donut Chart ─────────────────
-export function VulnTypeDonutChart() {
+interface VulnTypeDonutChartProps {
+  data: Array<{ name: string; value: number; color: string }>
+}
+
+export function VulnTypeDonutChart({ data }: VulnTypeDonutChartProps) {
+  const hasData = data && data.length > 0
+  const total = data.reduce((s, d) => s + d.value, 0)
   return (
     <div
       style={{
@@ -219,77 +224,97 @@ export function VulnTypeDonutChart() {
       >
         按漏洞类型统计发现数量
       </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ position: 'relative', width: '140px', height: '140px', flexShrink: 0 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={vulnTypeData}
-                cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={65}
-                paddingAngle={3}
-                dataKey="value"
-                stroke="none"
-              >
-                {vulnTypeData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              {/* Center text */}
-              <text
-                x="50%"
-                y="45%"
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="var(--text-primary)"
-                fontSize={22}
-                fontWeight={700}
-              >
-                23
-              </text>
-              <text
-                x="50%"
-                y="62%"
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="#94A3B8"
-                fontSize={9}
-                fontWeight={500}
-              >
-                总计
-              </text>
-            </PieChart>
-          </ResponsiveContainer>
+      {hasData ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ position: 'relative', width: '140px', height: '140px', flexShrink: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={40}
+                  outerRadius={65}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                {/* Center text */}
+                <text
+                  x="50%"
+                  y="45%"
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="var(--text-primary)"
+                  fontSize={22}
+                  fontWeight={700}
+                >
+                  {total}
+                </text>
+                <text
+                  x="50%"
+                  y="62%"
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="#94A3B8"
+                  fontSize={9}
+                  fontWeight={500}
+                >
+                  总计
+                </text>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {data.map((item) => (
+              <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '10px',
+                    height: '10px',
+                    background: item.color,
+                    flexShrink: 0,
+                    borderRadius: '2px',
+                  }}
+                />
+                <span
+                  style={{ flex: 1, fontSize: '12px', color: 'var(--text-secondary)' }}
+                >
+                  {item.name}
+                </span>
+                <span
+                  style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}
+                >
+                  {item.value}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {vulnTypeData.map((item) => (
-            <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: '10px',
-                  height: '10px',
-                  background: item.color,
-                  flexShrink: 0,
-                  borderRadius: '2px',
-                }}
-              />
-              <span
-                style={{ flex: 1, fontSize: '12px', color: 'var(--text-secondary)' }}
-              >
-                {item.name}
-              </span>
-              <span
-                style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}
-              >
-                {item.value}
-              </span>
-            </div>
-          ))}
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 180,
+            color: 'var(--text-muted)',
+          }}
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '12px', opacity: 0.4 }}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+          </svg>
+          <span style={{ fontSize: '13px' }}>暂无数据</span>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -399,7 +424,12 @@ export function TaskTrendChart({ data }: TaskTrendChartProps) {
 }
 
 // ─── Severity Bar Chart ─────────────────────────────
-export function SeverityBarChart() {
+interface SeverityBarChartProps {
+  data: Array<{ name: string; count: number; fill: string }>
+}
+
+export function SeverityBarChart({ data }: SeverityBarChartProps) {
+  const hasData = data && data.length > 0
   return (
     <div
       style={{
@@ -429,43 +459,63 @@ export function SeverityBarChart() {
       >
         按严重程度统计漏洞数量
       </p>
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart
-          data={severityData}
-          barCategoryGap="30%"
-          margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+      {hasData ? (
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart
+            data={data}
+            barCategoryGap="30%"
+            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="rgba(148,163,184,0.08)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="name"
+              tick={{
+                fill: '#64748B',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              axisLine={{ stroke: 'rgba(148,163,184,0.08)' }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{
+                fill: '#94A3B8',
+                fontSize: 10,
+              }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Bar dataKey="count" radius={[6, 6, 0, 0]} name="数量">
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} fillOpacity={0.85} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 200,
+            color: 'var(--text-muted)',
+          }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="rgba(148,163,184,0.08)"
-            vertical={false}
-          />
-          <XAxis
-            dataKey="name"
-            tick={{
-              fill: '#64748B',
-              fontSize: 11,
-              fontWeight: 500,
-            }}
-            axisLine={{ stroke: 'rgba(148,163,184,0.08)' }}
-            tickLine={false}
-          />
-          <YAxis
-            tick={{
-              fill: '#94A3B8',
-              fontSize: 10,
-            }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="count" radius={[6, 6, 0, 0]} name="数量">
-            {severityData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.fill} fillOpacity={0.85} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '12px', opacity: 0.4 }}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+          </svg>
+          <span style={{ fontSize: '13px' }}>暂无数据</span>
+        </div>
+      )}
     </div>
   )
 }

@@ -141,6 +141,104 @@ const Analysis = () => {
   // Connect to WebSocket
   useWebSocket(taskId, { onMessage: handleWsMessage });
 
+  // No taskId - show empty state directly
+  if (!taskId) {
+    return (
+      <div style={{ margin: '0 auto', width: '100%', maxWidth: '1200px', padding: '24px 16px' }}>
+        <div className="animate-slide-up" style={{ marginBottom: '24px' }}>
+          <h1
+            style={{
+              fontWeight: 600,
+              fontSize: '28px',
+              lineHeight: '1.3',
+              color: 'var(--text-primary)',
+            }}
+          >
+            Agent 分析过程
+          </h1>
+          <p style={{ marginTop: '4px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+            实时查看 AI Agent 的思考链与分析步骤
+          </p>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '16px',
+            border: '1px solid var(--border-light)',
+            background: 'var(--bg-card)',
+            padding: '48px',
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          <FileText size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+          <h3
+            style={{
+              fontWeight: 600,
+              fontSize: '18px',
+              color: 'var(--text-primary)',
+              marginBottom: '8px',
+            }}
+          >
+            尚未选择分析任务
+          </h3>
+          <p
+            style={{
+              fontSize: '14px',
+              color: 'var(--text-secondary)',
+              maxWidth: '400px',
+              textAlign: 'center',
+              marginBottom: '24px',
+            }}
+          >
+            请先提交代码进行分析，或在历史记录中查看已有任务的分析过程。
+          </p>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => navigate('/submit')}
+              className="gradient-bg"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                padding: '10px 20px',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: 'var(--shadow-brand)',
+              }}
+            >
+              提交分析任务
+            </button>
+            <button
+              onClick={() => navigate('/history')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-normal)',
+                padding: '10px 20px',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                background: 'transparent',
+                cursor: 'pointer',
+              }}
+            >
+              查看历史记录
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Fetch existing task data and trigger analysis if needed
   useEffect(() => {
     let cancelled = false;

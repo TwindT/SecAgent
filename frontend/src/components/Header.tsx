@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Menu, Switch } from 'antd'
 import type { MenuProps } from 'antd'
 import {
+  Home,
   LayoutDashboard,
   Upload,
   Shield,
@@ -15,7 +16,8 @@ import Logo from './Logo'
 
 // ─── Navigation items mapping ────────────────────────
 const navItems = [
-  { key: '/', label: '仪表盘', icon: LayoutDashboard },
+  { key: '/', label: '首页', icon: Home },
+  { key: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
   { key: '/submit', label: '任务提交', icon: Upload },
   { key: '/analysis', label: '分析过程', icon: Shield },
   { key: '/report', label: '分析报告', icon: FileText },
@@ -32,13 +34,26 @@ const menuItems: MenuProps['items'] = navItems.map((item) => ({
 function Header() {
   const location = useLocation()
   const navigate = useNavigate()
-  const [isDark, setIsDark] = useState(false)
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('theme') === 'dark'
+  })
+
+  // Apply theme on mount and when isDark changes
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.setAttribute('data-theme', 'dark')
+    } else {
+      document.documentElement.removeAttribute('data-theme')
+    }
+    localStorage.setItem('theme', isDark ? 'dark' : 'light')
+  }, [isDark])
 
   // Determine active key from current path
   const getSelectedKey = () => {
     const path = location.pathname
     // Match exact or prefix for dynamic routes
     if (path === '/') return '/'
+    if (path.startsWith('/dashboard')) return '/dashboard'
     if (path.startsWith('/submit')) return '/submit'
     if (path.startsWith('/analysis')) return '/analysis'
     if (path.startsWith('/report')) return '/report'
@@ -52,12 +67,6 @@ function Header() {
 
   const handleThemeToggle = (checked: boolean) => {
     setIsDark(checked)
-    // Apply theme to document body
-    if (checked) {
-      document.documentElement.setAttribute('data-theme', 'dark')
-    } else {
-      document.documentElement.removeAttribute('data-theme')
-    }
   }
 
   return (

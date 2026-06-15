@@ -1743,11 +1743,41 @@ const Report = () => {
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
           {/* Severity Bar Chart */}
-          <SeverityBarChart />
+          <SeverityBarChart data={(() => {
+            const sevColorMap: Record<string, string> = { high: '#EF4444', medium: '#F59E0B', low: '#10B981', info: '#94A3B8' }
+            const sevLabelMap: Record<string, string> = { high: '高危', medium: '中危', low: '低危', info: '信息' }
+            return Object.entries(severityCounts)
+              .filter(([key]) => key !== 'all' && severityCounts[key] > 0)
+              .map(([key, count]) => ({ name: sevLabelMap[key] ?? key, count, fill: sevColorMap[key] ?? '#94A3B8' }))
+          })()} />
           {/* Vulnerability Type Donut */}
-          <VulnTypeDonutChart />
+          <VulnTypeDonutChart data={(() => {
+            const typeCounts: Record<string, { count: number; color: string }> = {}
+            const cweColorMap: Record<string, string> = {
+              'CWE-89': '#EF4444', 'CWE-79': '#5BA3FF', 'CWE-78': '#F59E0B',
+              'CWE-22': '#5EEAD4', 'CWE-798': '#10B981', 'CWE-352': '#94A3B8',
+              'CWE-200': '#8B5CF6', 'CWE-611': '#EC4899', 'CWE-502': '#F97316', 'CWE-918': '#06B6D4',
+            }
+            const cweLabelMap: Record<string, string> = {
+              'CWE-89': 'SQL 注入', 'CWE-79': 'XSS', 'CWE-78': '命令注入',
+              'CWE-22': '路径遍历', 'CWE-798': '硬编码密钥', 'CWE-352': 'CSRF',
+              'CWE-200': '信息泄露', 'CWE-611': 'XXE', 'CWE-502': '反序列化', 'CWE-918': 'SSRF',
+            }
+            vulnerabilities.forEach((v) => {
+              const cwe = v.cwe || '其他'
+              if (!typeCounts[cwe]) {
+                typeCounts[cwe] = { count: 0, color: cweColorMap[cwe] || '#94A3B8' }
+              }
+              typeCounts[cwe].count++
+            })
+            return Object.entries(typeCounts).map(([cwe, info]) => ({
+              name: cweLabelMap[cwe] || cwe,
+              value: info.count,
+              color: info.color,
+            }))
+          })()} />
           {/* Risk Radar */}
-          <RiskRadarChart />
+          <RiskRadarChart data={[]} />
         </div>
       </div>
 

@@ -448,7 +448,7 @@ const Dashboard = () => {
                 >
                   <Icon size={20} style={{ color: stat.color }} />
                 </div>
-                <MiniSparkline data={sparklineData.length > 1 ? sparklineData : [0, 1, 2, 1, 3]} color={stat.sparkColor} />
+                <MiniSparkline data={sparklineData.length > 1 ? sparklineData : []} color={stat.sparkColor} />
               </div>
               <div style={{ marginTop: '16px' }}>
                 <div
@@ -1223,15 +1223,39 @@ const Dashboard = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
           {/* Chart 1: Risk Radar */}
           <div className="animate-slide-up" style={{ animationDelay: '460ms', animationFillMode: 'both' }}>
-            <RiskRadarChart />
+            <RiskRadarChart data={[]} />
           </div>
           {/* Chart 2: Vuln Type Donut */}
           <div className="animate-slide-up" style={{ animationDelay: '520ms', animationFillMode: 'both' }}>
-            <VulnTypeDonutChart />
+            <VulnTypeDonutChart data={(stats?.tasksByType ?? []).map((t) => {
+              const typeColorMap: Record<string, string> = {
+                code_scan: '#5BA3FF',
+                malware_analysis: '#5EEAD4',
+              }
+              const typeLabelMap: Record<string, string> = {
+                code_scan: '代码扫描',
+                malware_analysis: '恶意分析',
+              }
+              return { name: typeLabelMap[t.type] ?? t.type, value: t.count, color: typeColorMap[t.type] ?? '#94A3B8' }
+            })} />
           </div>
           {/* Chart 3: Severity Bar */}
           <div className="animate-slide-up" style={{ animationDelay: '580ms', animationFillMode: 'both' }}>
-            <SeverityBarChart />
+            <SeverityBarChart data={(stats?.tasksBySeverity ?? []).map((s) => {
+              const sevColorMap: Record<string, string> = {
+                high: '#EF4444',
+                medium: '#F59E0B',
+                low: '#10B981',
+                info: '#94A3B8',
+              }
+              const sevLabelMap: Record<string, string> = {
+                high: '高危',
+                medium: '中危',
+                low: '低危',
+                info: '信息',
+              }
+              return { name: sevLabelMap[s.severity] ?? s.severity, count: s.count, fill: sevColorMap[s.severity] ?? '#94A3B8' }
+            })} />
           </div>
           {/* Chart 4: Task Trend */}
           <div className="animate-slide-up" style={{ animationDelay: '640ms', animationFillMode: 'both' }}>

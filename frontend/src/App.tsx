@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import Hero from './components/Hero';
 import { Dashboard, Submit, Analysis, Report, History } from './pages';
 
 function App() {
@@ -10,9 +11,12 @@ function App() {
         <Header />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Hero />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/submit" element={<Submit />} />
+            <Route path="/analysis" element={<Analysis />} />
             <Route path="/analysis/:taskId" element={<Analysis />} />
+            <Route path="/report" element={<Report />} />
             <Route path="/report/:taskId" element={<Report />} />
             <Route path="/history" element={<History />} />
           </Routes>

@@ -71,3 +71,6 @@ backend/app/uploads/
 
 # OS
 .vagrant/
+
+# Frontend example
+fronted_exm/
