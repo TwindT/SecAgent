@@ -13,7 +13,7 @@ import {
   Loader2,
   ArrowRight,
 } from 'lucide-react';
-import { getTask, triggerAnalysis } from '@/services/api';
+import { getTask } from '@/services/api';
 import type { TaskResponse, AnalysisStep } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import type { WSMessage } from '@/hooks/useWebSocket';
@@ -82,7 +82,6 @@ const stepConfig: Record<
 const typeLabels: Record<string, string> = {
   vulnerability_detection: '代码漏洞检测',
   malware_analysis: '恶意代码分析',
-  code_scan: '代码漏洞检测',
 };
 
 // ─── Component ──────────────────────────────────────
@@ -139,7 +138,7 @@ const Analysis = () => {
   );
 
   // Connect to WebSocket
-  useWebSocket(taskId, { onMessage: handleWsMessage });
+  const { isReconnecting } = useWebSocket(taskId, { onMessage: handleWsMessage });
 
   // No taskId - show empty state directly
   if (!taskId) {
@@ -304,56 +303,10 @@ const Analysis = () => {
           }
         }
 
-        // If task is still pending and we haven't triggered analysis yet, trigger it
+        // If task is still pending/analyzing, poll for updates
         if ((task.status === 'pending' || task.status === 'analyzing') && !triggeredRef.current) {
           triggeredRef.current = true;
-          triggerAnalysis(Number(taskId))
-            .then(() => {
-              // Refresh steps after analysis completes
-              getTask(Number(taskId)).then((res2) => {
-                if (cancelled) return;
-                const updatedTask = res2.data;
-                if (updatedTask.analysis_steps && updatedTask.analysis_steps.length > 0) {
-                  const displaySteps: DisplayStep[] = updatedTask.analysis_steps.map((step: AnalysisStep) => {
-                    let stepType: StepType = 'thought';
-                    let stepTitle = '';
-                    let stepContent = '';
-                    if (step.thought) {
-                      stepType = 'thought';
-                      stepTitle = '思考';
-                      stepContent = step.thought;
-                    } else if (step.action) {
-                      stepType = 'action';
-                      stepTitle = '执行操作';
-                      stepContent = step.action;
-                    } else if (step.observation) {
-                      stepType = 'observation';
-                      stepTitle = '观察结果';
-                      stepContent = step.observation;
-                    }
-
-                    return {
-                      id: `step-${step.id}`,
-                      type: stepType,
-                      title: stepTitle,
-                      content: stepContent,
-                      timestamp: new Date(step.created_at).toLocaleTimeString('zh-CN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      }),
-                    };
-                  });
-                  setSteps(displaySteps);
-                  setExpandedSteps(new Set(displaySteps.map((s) => s.id)));
-                  setTotalSteps(displaySteps.length);
-                  setIsAnalyzing(false);
-                }
-              });
-            })
-            .catch((err) => {
-              console.error('Failed to trigger analysis:', err);
-            });
+          // Analysis is auto-triggered on task creation; just poll for step updates
         }
 
         // If task is already done/failed, stop analyzing
@@ -554,7 +507,9 @@ const Analysis = () => {
             {isAnalyzing ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                <span style={{ fontSize: '14px', fontWeight: 500 }}>分析中...</span>
+                <span style={{ fontSize: '14px', fontWeight: 500 }}>
+                  {isReconnecting ? '重新连接中...' : '分析中...'}
+                </span>
               </>
             ) : (
               <>
@@ -633,7 +588,7 @@ const Analysis = () => {
             }}
           />
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            类型: {typeLabels[taskInfo?.type || 'code_scan']}
+            类型: {typeLabels[taskInfo?.type || ''] || taskInfo?.type}
           </span>
           <span
             style={{

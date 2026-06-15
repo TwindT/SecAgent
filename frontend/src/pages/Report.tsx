@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Modal, Spin, message, Table, Tabs, Tag, Progress, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -33,6 +33,8 @@ import {
   Activity,
   Search,
   FileCode,
+  Bot,
+  User,
 } from 'lucide-react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -43,7 +45,7 @@ import {
   SeverityBarChart,
 } from '../components/secagent/VisualizationCharts'
 import ATTACKHeatmap, { type ATTCKTechnique } from '../components/secagent/ATTACKHeatmap'
-import { getTask, sendMessage, downloadPdfReport, downloadMdReport, type TaskResponse } from '../services/api'
+import { getTask, sendMessage, getConversations, downloadPdfReport, downloadMdReport, type TaskResponse, type ConversationResponse } from '../services/api'
 
 // ─── CWE Database ─────────────────────────────────────
 interface CWEInfo {
@@ -587,7 +589,7 @@ interface ParsedResult {
 
 interface ChatMessage {
   id: string
-  role: 'user' | 'agent'
+  role: 'user' | 'assistant'
   content: string
   time: string
 }
@@ -618,9 +620,8 @@ interface IOCRow {
 
 // ─── Task type display labels ────────────────────────
 const taskTypeLabels: Record<string, string> = {
-  code_scan: '代码漏洞检测',
-  malware_analysis: '恶意代码分析',
   vulnerability_detection: '代码漏洞检测',
+  malware_analysis: '恶意代码分析',
 }
 
 // ─── Severity filter options ─────────────────────────
@@ -701,6 +702,11 @@ const Report = () => {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
 
+  // Configure marked for safe chat rendering
+  useMemo(() => {
+    marked.setOptions({ breaks: true, gfm: true })
+  }, [])
+
   // ─── API state ───────────────────────────────────
   const [task, setTask] = useState<TaskResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -711,7 +717,10 @@ const Report = () => {
   const [chatInput, setChatInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isChatTyping, setIsChatTyping] = useState(false)
+  const [isWaitingResponse, setIsWaitingResponse] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+  const chatMessagesRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   // ─── Enhancement state ───────────────────────────
   const [cweModalOpen, setCweModalOpen] = useState(false)
@@ -742,19 +751,24 @@ const Report = () => {
         const fetchedTask = res.data
         setTask(fetchedTask)
 
-        // Initialize chat messages from existing conversations if available
-        if ((fetchedTask as any).conversations && (fetchedTask as any).conversations.length > 0) {
-          setMessages(
-            (fetchedTask as any).conversations.map((c: any) => ({
-              id: c.id,
-              role: c.role,
-              content: c.content,
-              time: new Date(c.createdAt).toLocaleTimeString('zh-CN', {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            }))
-          )
+        // Load conversation history from dedicated API
+        try {
+          const convRes = await getConversations(Number(taskId))
+          if (convRes.data && convRes.data.length > 0) {
+            setMessages(
+              convRes.data.map((c: ConversationResponse) => ({
+                id: String(c.id),
+                role: c.role,
+                content: c.content,
+                time: new Date(c.created_at).toLocaleTimeString('zh-CN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              }))
+            )
+          }
+        } catch {
+          // 对话历史加载失败不影响主报告展示
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : '加载报告失败')
@@ -764,6 +778,13 @@ const Report = () => {
     }
     loadTask()
   }, [taskId])
+
+  // ─── Auto-scroll chat to bottom ──────────────────
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight
+    }
+  }, [messages, isChatTyping, isWaitingResponse])
 
   // ─── Parse resultJson ────────────────────────────
   const resultData = useMemo<ParsedResult | null>(() => {
@@ -1053,7 +1074,7 @@ const Report = () => {
 
   // ─── Chat handler ────────────────────────────────
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || isChatTyping || !taskId) return
+    if (!chatInput.trim() || isChatTyping || isWaitingResponse || !taskId) return
 
     const userMsg: ChatMessage = {
       id: `${Date.now()}`,
@@ -1065,26 +1086,56 @@ const Report = () => {
       }),
     }
     setMessages((prev) => [...prev, userMsg])
+    const inputText = chatInput
     setChatInput('')
-    setIsChatTyping(true)
+    setIsWaitingResponse(true)
     setChatError(null)
 
     try {
-      const res = await sendMessage(Number(taskId), { message: userMsg.content })
-      const data = res.data
-      const agentMsg: ChatMessage = {
-        id: `${Date.now() + 1}`,
-        role: 'agent',
-        content: data.reply,
-        time: new Date().toLocaleTimeString('zh-CN', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-      }
-      setMessages((prev) => [...prev, agentMsg])
+      const res = await sendMessage(Number(taskId), { message: inputText })
+      const fullReply = res.data.reply
+      setIsWaitingResponse(false)
+      setIsChatTyping(true)
+
+      // Typing animation: gradually reveal the reply
+      const agentMsgId = `${Date.now() + 1}`
+      const agentTime = new Date().toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+
+      // Add empty agent message first
+      setMessages((prev) => [
+        ...prev,
+        { id: agentMsgId, role: 'assistant', content: '', time: agentTime },
+      ])
+
+      // Animate character by character
+      const charsPerTick = 3
+      const tickInterval = 20
+      let currentIndex = 0
+
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          currentIndex += charsPerTick
+          if (currentIndex >= fullReply.length) {
+            currentIndex = fullReply.length
+            clearInterval(timer)
+            resolve()
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === agentMsgId
+                ? { ...m, content: fullReply.slice(0, currentIndex) }
+                : m
+            )
+          )
+        }, tickInterval)
+      })
     } catch (err) {
       setChatError(err instanceof Error ? err.message : '发送失败，请重试')
       message.error('发送失败，请稍后重试')
+      setIsWaitingResponse(false)
     } finally {
       setIsChatTyping(false)
     }
@@ -2506,62 +2557,148 @@ const Report = () => {
           >
             AI 驱动
           </span>
+          {messages.length > 0 && (
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+              }}
+            >
+              {messages.length} 条对话
+            </span>
+          )}
         </div>
 
         {/* Chat Messages */}
         <div
+          ref={chatMessagesRef}
           className="custom-scrollbar"
-          style={{ maxHeight: '320px', overflowY: 'auto', padding: '16px 24px' }}
+          style={{ maxHeight: '400px', overflowY: 'auto', padding: '16px 24px' }}
         >
-          {messages.length === 0 && !isChatTyping && (
+          {messages.length === 0 && !isChatTyping && !isWaitingResponse && (
             <div
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 0', color: 'var(--text-muted)' }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 0',
+                color: 'var(--text-muted)',
+                gap: '12px',
+              }}
             >
+              <Bot size={32} style={{ opacity: 0.3 }} />
               <p style={{ fontSize: '14px' }}>向 AI 助手提问关于分析结果的问题</p>
+              <p style={{ fontSize: '12px', opacity: 0.6 }}>
+                例如："这个漏洞的修复方案是什么？"
+              </p>
             </div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                  alignItems: 'flex-start',
+                }}
               >
+                {/* Avatar */}
                 <div
                   style={{
-                    maxWidth: '80%',
-                    borderRadius: '16px',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    background:
+                      msg.role === 'user'
+                        ? 'var(--accent-gradient)'
+                        : 'rgba(148,163,184,0.08)',
+                    color: msg.role === 'user' ? 'white' : 'var(--accent-start)',
+                  }}
+                >
+                  {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                </div>
+                {/* Bubble */}
+                <div
+                  style={{
+                    maxWidth: '75%',
+                    borderRadius: msg.role === 'user'
+                      ? '16px 16px 4px 16px'
+                      : '16px 16px 16px 4px',
                     padding: '12px 16px',
                     background:
                       msg.role === 'user'
                         ? 'var(--accent-gradient)'
                         : 'rgba(148,163,184,0.04)',
-                    color:
-                      msg.role === 'user' ? 'white' : 'var(--text-primary)',
+                    border: msg.role === 'assistant' ? '1px solid var(--border-light)' : 'none',
+                    color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
                   }}
                 >
                   <div
+                    className={msg.role === 'assistant' ? 'chat-markdown' : ''}
                     style={{ fontSize: '14px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}
+                    dangerouslySetInnerHTML={
+                      msg.role === 'assistant'
+                        ? {
+                            __html:
+                              (marked.parse(msg.content) as string) +
+                              (isChatTyping && msg.id === messages[messages.length - 1]?.id && msg.role === 'assistant'
+                                ? '<span class="chat-typing-cursor"></span>'
+                                : ''),
+                          }
+                        : undefined
+                    }
                   >
-                    {msg.content}
+                    {msg.role === 'user' ? msg.content : null}
                   </div>
+                  {!(isChatTyping && msg.role === 'assistant' && msg.id === messages[messages.length - 1]?.id) && (
                   <div
-                    style={{ marginTop: '6px', fontSize: '10px', textAlign: 'right', color: msg.role === 'user' ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)' }}
+                    style={{
+                      marginTop: '6px',
+                      fontSize: '10px',
+                      textAlign: msg.role === 'user' ? 'right' : 'left',
+                      color: msg.role === 'user' ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)',
+                    }}
                   >
                     {msg.time}
                   </div>
+                  )}
                 </div>
               </div>
             ))}
-            {isChatTyping && (
-              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            {isWaitingResponse && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    background: 'rgba(148,163,184,0.08)',
+                    color: 'var(--accent-start)',
+                  }}
+                >
+                  <Bot size={16} />
+                </div>
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    borderRadius: '16px',
+                    gap: '6px',
+                    borderRadius: '16px 16px 16px 4px',
                     padding: '14px 20px',
                     background: 'rgba(148,163,184,0.04)',
+                    border: '1px solid var(--border-light)',
                   }}
                 >
                   <span className="typing-dot" />
@@ -2599,12 +2736,13 @@ const Report = () => {
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-end',
               gap: '12px',
               borderRadius: '12px',
               border: '1px solid var(--border-normal)',
-              padding: '8px 16px',
+              padding: '8px 12px',
               transition: 'border-color 0.15s',
+              background: 'var(--bg-card)',
             }}
             onFocus={(e) => {
               e.currentTarget.style.borderColor = 'var(--border-focus)'
@@ -2613,12 +2751,15 @@ const Report = () => {
               e.currentTarget.style.borderColor = 'var(--border-normal)'
             }}
           >
-            <input
-              type="text"
+            <textarea
+              ref={chatInputRef}
               value={chatInput}
               onChange={(e) => {
                 setChatInput(e.target.value)
                 if (chatError) setChatError(null)
+                // Auto-resize textarea
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -2627,19 +2768,24 @@ const Report = () => {
                 }
               }}
               placeholder="追问关于分析结果的问题..."
+              rows={1}
               style={{
                 flex: 1,
                 background: 'transparent',
                 fontSize: '14px',
+                lineHeight: 1.5,
                 border: 'none',
                 outline: 'none',
                 color: 'var(--text-primary)',
+                resize: 'none',
+                maxHeight: '120px',
+                fontFamily: 'inherit',
               }}
-              disabled={isChatTyping}
+              disabled={isChatTyping || isWaitingResponse}
             />
             <button
               onClick={handleSendMessage}
-              disabled={!chatInput.trim() || isChatTyping}
+              disabled={!chatInput.trim() || isChatTyping || isWaitingResponse}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -2647,17 +2793,12 @@ const Report = () => {
                 borderRadius: '8px',
                 padding: '8px',
                 border: 'none',
-                background: 'transparent',
-                color: 'var(--accent-start)',
-                cursor: chatInput.trim() && !isChatTyping ? 'pointer' : 'not-allowed',
-                opacity: chatInput.trim() && !isChatTyping ? 1 : 0.4,
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                if (chatInput.trim()) e.currentTarget.style.background = 'rgba(91,163,255,0.06)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
+                background: chatInput.trim() && !isChatTyping && !isWaitingResponse ? 'var(--accent-gradient)' : 'transparent',
+                color: chatInput.trim() && !isChatTyping && !isWaitingResponse ? 'white' : 'var(--accent-start)',
+                cursor: chatInput.trim() && !isChatTyping && !isWaitingResponse ? 'pointer' : 'not-allowed',
+                opacity: chatInput.trim() && !isChatTyping && !isWaitingResponse ? 1 : 0.4,
+                transition: 'background 0.15s, opacity 0.15s',
+                flexShrink: 0,
               }}
             >
               <Send size={16} />

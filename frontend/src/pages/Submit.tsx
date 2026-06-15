@@ -17,7 +17,7 @@ import {
   Layers,
   GitBranch,
 } from 'lucide-react'
-import { createTask } from '@/services/api'
+import { createTask, uploadFile } from '@/services/api'
 import { message } from 'antd'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -264,7 +264,7 @@ const Submit = () => {
       }
       // Fallback: language_scan_timestamp
       const langLabel = languages.find((l) => l.value === language)?.label || language
-      return `${langLabel}_code_scan`
+      return `${langLabel}_vulnerability_detection`
     }
     return uploadedFiles[0]?.name || 'untitled_file'
   }
@@ -285,9 +285,17 @@ const Submit = () => {
           navigate(`/analysis/${taskId}`)
         }, 600)
       } else {
+        // 恶意代码分析：先上传文件，再用返回的路径创建任务
+        if (uploadedFiles.length === 0) {
+          message.error('请先上传要分析的文件')
+          setIsSubmitting(false)
+          return
+        }
+        const uploadRes = await uploadFile(uploadedFiles[0])
+        const filePath = uploadRes.data.path
         const result = await createTask({
           type: 'malware_analysis',
-          input_path: 'upload/' + (uploadedFiles[0]?.name || 'untitled_file'),
+          input_path: filePath,
         })
         setSuccess(true)
         message.success('恶意代码分析任务已创建，正在跳转到分析页面...')
@@ -311,10 +319,17 @@ const Submit = () => {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
     const files = Array.from(e.dataTransfer.files)
+    const oversized = files.filter((f) => f.size > MAX_FILE_SIZE)
+    if (oversized.length > 0) {
+      message.error(`文件 ${oversized.map((f) => f.name).join(', ')} 超过 50MB 限制`)
+      return
+    }
     setUploadedFiles((prev) => [...prev, ...files])
     if (error) setError(null)
   }
@@ -322,6 +337,11 @@ const Submit = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files)
+      const oversized = files.filter((f) => f.size > MAX_FILE_SIZE)
+      if (oversized.length > 0) {
+        message.error(`文件 ${oversized.map((f) => f.name).join(', ')} 超过 50MB 限制`)
+        return
+      }
       setUploadedFiles((prev) => [...prev, ...files])
       if (error) setError(null)
     }

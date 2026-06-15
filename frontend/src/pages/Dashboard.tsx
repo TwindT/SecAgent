@@ -212,143 +212,78 @@ function ElapsedTimeCounter({ startTime }: { startTime: string }) {
 
 // ─── Mock 数据（前后端联调前用于展示效果） ──────────
 const MOCK_STATS: StatsResponse = {
-  totalTasks: 42,
-  todayTasks: 8,
-  highSeverityTasks: 5,
-  avgDuration: '2m 35s',
-  recentTasks: [
+  total_tasks: 42,
+  today_tasks: 8,
+  high_severity_tasks: 5,
+  avg_duration: '2m 35s',
+  recent_tasks: [
     {
-      id: '1',
-      type: 'code_scan',
+      id: 1,
+      type: 'vulnerability_detection',
       status: 'done',
-      name: '用户认证模块代码审计',
-      inputPath: 'auth_module.py',
-      inputContent: null,
-      language: 'python',
-      resultJson: null,
-      severity: 'high',
-      vulnCount: 3,
-      duration: '1m 52s',
-      createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+      input_path: 'auth_module.py',
+      input_content: null,
+      result_json: '{"severity":"high","vuln_count":3}',
+      created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+      updated_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+      analysis_steps: [],
     },
     {
-      id: '2',
+      id: 2,
       type: 'malware_analysis',
       status: 'done',
-      name: 'suspicious_payload.exe 恶意分析',
-      inputPath: 'suspicious_payload.exe',
-      inputContent: null,
-      language: null,
-      resultJson: null,
-      severity: 'high',
-      vulnCount: 7,
-      duration: '3m 18s',
-      createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+      input_path: 'suspicious_payload.exe',
+      input_content: null,
+      result_json: '{"severity":"high","vuln_count":7}',
+      created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      updated_at: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+      analysis_steps: [],
     },
     {
-      id: '3',
-      type: 'code_scan',
+      id: 3,
+      type: 'vulnerability_detection',
       status: 'analyzing',
-      name: '支付接口安全扫描',
-      inputPath: 'payment_api.py',
-      inputContent: null,
-      language: 'python',
-      resultJson: null,
-      severity: null,
-      vulnCount: 0,
-      duration: null,
-      createdAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+      input_path: 'payment_api.py',
+      input_content: null,
+      result_json: null,
+      created_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+      updated_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+      analysis_steps: [],
     },
     {
-      id: '4',
+      id: 4,
       type: 'malware_analysis',
       status: 'done',
-      name: 'macro_doc.xlsx 宏分析',
-      inputPath: 'macro_doc.xlsx',
-      inputContent: null,
-      language: null,
-      resultJson: null,
-      severity: 'medium',
-      vulnCount: 2,
-      duration: '2m 45s',
-      createdAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 87 * 60 * 1000).toISOString(),
+      input_path: 'macro_doc.xlsx',
+      input_content: null,
+      result_json: '{"severity":"medium","vuln_count":2}',
+      created_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+      updated_at: new Date(Date.now() - 87 * 60 * 1000).toISOString(),
+      analysis_steps: [],
     },
     {
-      id: '5',
-      type: 'code_scan',
+      id: 5,
+      type: 'vulnerability_detection',
       status: 'failed',
-      name: '前端 XSS 漏洞检测',
-      inputPath: 'dashboard.js',
-      inputContent: null,
-      language: 'javascript',
-      resultJson: null,
-      severity: null,
-      vulnCount: 0,
-      duration: null,
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '6',
-      type: 'code_scan',
-      status: 'done',
-      name: '数据库查询模块审计',
-      inputPath: 'db_queries.py',
-      inputContent: null,
-      language: 'python',
-      resultJson: null,
-      severity: 'medium',
-      vulnCount: 2,
-      duration: '1m 30s',
-      createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 3 * 60 * 60 * 1000 + 90 * 1000).toISOString(),
-    },
-    {
-      id: '7',
-      type: 'malware_analysis',
-      status: 'done',
-      name: 'keygen.exe 密钥生成器分析',
-      inputPath: 'keygen.exe',
-      inputContent: null,
-      language: null,
-      resultJson: null,
-      severity: 'high',
-      vulnCount: 5,
-      duration: '4m 10s',
-      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 5 * 60 * 60 * 1000 + 250 * 1000).toISOString(),
-    },
-    {
-      id: '8',
-      type: 'code_scan',
-      status: 'pending',
-      name: '配置文件硬编码检测',
-      inputPath: 'config.py',
-      inputContent: null,
-      language: 'python',
-      resultJson: null,
-      severity: null,
-      vulnCount: 0,
-      duration: null,
-      createdAt: new Date(Date.now() - 10 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 10 * 1000).toISOString(),
+      input_path: 'dashboard.js',
+      input_content: null,
+      result_json: null,
+      created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      analysis_steps: [],
     },
   ],
-  tasksByType: [
-    { type: 'code_scan', count: 28 },
+  tasks_by_type: [
+    { type: 'vulnerability_detection', count: 28 },
     { type: 'malware_analysis', count: 14 },
   ],
-  tasksBySeverity: [
+  tasks_by_severity: [
     { severity: 'high', count: 5 },
     { severity: 'medium', count: 12 },
     { severity: 'low', count: 18 },
     { severity: 'info', count: 7 },
   ],
-  tasksByDay: [
+  tasks_by_day: [
     { date: '06-09', count: 4 },
     { date: '06-10', count: 7 },
     { date: '06-11', count: 5 },
@@ -399,7 +334,7 @@ const Dashboard = () => {
 
   // Simulate progress for analyzing tasks
   useEffect(() => {
-    const analyzingTasks = (stats?.recentTasks ?? []).filter(t => t.status === 'analyzing')
+    const analyzingTasks = (stats?.recent_tasks ?? []).filter(t => t.status === 'analyzing')
     if (analyzingTasks.length === 0) return
 
     const interval = setInterval(() => {
@@ -417,21 +352,21 @@ const Dashboard = () => {
     }, 2000)
 
     return () => clearInterval(interval)
-  }, [stats?.recentTasks])
+  }, [stats?.recent_tasks])
 
   // Compute status counts for success rate chart
   const getStatusCounts = useCallback(() => {
-    const tasks = stats?.recentTasks ?? []
+    const tasks = stats?.recent_tasks ?? []
     return {
       done: tasks.filter(t => t.status === 'done').length,
       failed: tasks.filter(t => t.status === 'failed').length,
       analyzing: tasks.filter(t => t.status === 'analyzing').length,
       pending: tasks.filter(t => t.status === 'pending').length,
     }
-  }, [stats?.recentTasks])
+  }, [stats?.recent_tasks])
 
-  // Sparkline data generation from tasksByDay
-  const sparklineData = (stats?.tasksByDay ?? []).map(d => d.count)
+  // Sparkline data generation from tasks_by_day
+  const sparklineData = (stats?.tasks_by_day ?? []).map(d => d.count)
 
   if (isLoading) {
     return (
@@ -531,9 +466,9 @@ const Dashboard = () => {
         {[
           {
             title: '今日任务',
-            value: stats?.todayTasks ?? 0,
+            value: stats?.today_tasks ?? 0,
             isNumeric: true,
-            change: `较昨日 +${Math.min(stats?.todayTasks ?? 0, 3)}`,
+            change: `较昨日 +${Math.min(stats?.today_tasks ?? 0, 3)}`,
             changeUp: true,
             icon: Activity,
             color: '#5BA3FF',
@@ -542,9 +477,9 @@ const Dashboard = () => {
           },
           {
             title: '总任务数',
-            value: stats?.totalTasks ?? 0,
+            value: stats?.total_tasks ?? 0,
             isNumeric: true,
-            change: `${stats?.totalTasks ?? 0} 个任务`,
+            change: `${stats?.total_tasks ?? 0} 个任务`,
             changeUp: true,
             icon: FileSearch,
             color: '#5EEAD4',
@@ -553,10 +488,10 @@ const Dashboard = () => {
           },
           {
             title: '高危发现',
-            value: stats?.highSeverityTasks ?? 0,
+            value: stats?.high_severity_tasks ?? 0,
             isNumeric: true,
-            change: (stats?.highSeverityTasks ?? 0) > 0 ? `需关注` : `安全`,
-            changeUp: (stats?.highSeverityTasks ?? 0) === 0,
+            change: (stats?.high_severity_tasks ?? 0) > 0 ? `需关注` : `安全`,
+            changeUp: (stats?.high_severity_tasks ?? 0) === 0,
             icon: AlertTriangle,
             color: '#EF4444',
             bgColor: 'rgba(239,68,68,0.08)',
@@ -566,7 +501,7 @@ const Dashboard = () => {
             title: '平均耗时',
             value: 0,
             isNumeric: false,
-            displayValue: stats?.avgDuration ?? '0s',
+            displayValue: stats?.avg_duration ?? '0s',
             change: `分析效率`,
             changeUp: true,
             icon: Clock,
@@ -778,7 +713,7 @@ const Dashboard = () => {
       </div>
 
       {/* Active Analysis Progress (Enhanced) */}
-      {(stats?.recentTasks ?? []).filter(t => t.status === 'analyzing').length > 0 && (
+      {(stats?.recent_tasks ?? []).filter(t => t.status === 'analyzing').length > 0 && (
         <div
           className="animate-slide-up"
           style={{ marginBottom: '24px', animationDelay: '300ms', animationFillMode: 'both' }}
@@ -829,11 +764,11 @@ const Dashboard = () => {
                   color: '#5BA3FF',
                 }}
               >
-                {(stats?.recentTasks ?? []).filter(t => t.status === 'analyzing').length} 个任务进行中
+                {(stats?.recent_tasks ?? []).filter(t => t.status === 'analyzing').length} 个任务进行中
               </span>
             </div>
             <div>
-              {(stats?.recentTasks ?? []).filter(t => t.status === 'analyzing').map((task) => {
+              {(stats?.recent_tasks ?? []).filter(t => t.status === 'analyzing').map((task) => {
                 const progress = analyzingProgress[task.id] ?? 15
                 return (
                   <div
@@ -863,20 +798,20 @@ const Dashboard = () => {
                         borderRadius: '12px',
                         width: '32px',
                         height: '32px',
-                        background: task.type === 'code_scan'
+                        background: task.type === 'vulnerability_detection'
                           ? 'rgba(91,163,255,0.1)'
                           : 'rgba(94,234,212,0.1)',
                         flexShrink: 0,
                       }}
                     >
-                      {task.type === 'code_scan'
+                      {task.type === 'vulnerability_detection'
                         ? <Code2 size={15} style={{ color: '#5BA3FF' }} />
                         : <Bug size={15} style={{ color: '#5EEAD4' }} />
                       }
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {task.name}
+                        {task.input_path ? task.input_path.split('/').pop() : task.input_content ? `代码片段 #${task.id}` : `任务 #${task.id}`}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                         <div style={{ flex: 1, height: '6px', borderRadius: '9999px', overflow: 'hidden', background: 'rgba(148,163,184,0.08)' }}>
@@ -896,7 +831,7 @@ const Dashboard = () => {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                         <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                          已用时 <ElapsedTimeCounter startTime={task.createdAt} />
+                          已用时 <ElapsedTimeCounter startTime={task.created_at} />
                         </span>
                       </div>
                     </div>
@@ -960,7 +895,7 @@ const Dashboard = () => {
               </button>
             </div>
             <div>
-              {(stats?.recentTasks ?? []).map((task) => (
+              {(stats?.recent_tasks ?? []).map((task) => (
                 <div
                   key={task.id}
                   className="recent-item-hover card-hover"
@@ -1000,13 +935,13 @@ const Dashboard = () => {
                       width: '36px',
                       height: '36px',
                       background:
-                        task.type === 'code_scan'
+                        task.type === 'vulnerability_detection'
                           ? 'rgba(91,163,255,0.08)'
                           : 'rgba(94,234,212,0.08)',
                       flexShrink: 0,
                     }}
                   >
-                    {task.type === 'code_scan' ? (
+                    {task.type === 'vulnerability_detection' ? (
                       <Code2
                         size={18}
                         style={{ color: '#5BA3FF' }}
@@ -1031,7 +966,7 @@ const Dashboard = () => {
                         color: 'var(--text-primary)',
                       }}
                     >
-                      {task.name}
+                      {task.input_path ? task.input_path.split('/').pop() : task.input_content ? `代码片段 #${task.id}` : `任务 #${task.id}`}
                     </div>
                     <div
                       style={{
@@ -1044,16 +979,16 @@ const Dashboard = () => {
                       }}
                     >
                       <span>
-                        {task.type === 'code_scan' ? '代码扫描' : '恶意分析'}
+                        {task.type === 'vulnerability_detection' ? '代码扫描' : '恶意分析'}
                       </span>
                       <span>·</span>
-                      <span>{new Date(task.createdAt).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>{new Date(task.created_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
 
                   {/* Severity + Status */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    {getSeverityDot(task.severity)}
+                    {getSeverityDot(task.result_json ? (() => { try { return JSON.parse(task.result_json).severity } catch { return null } })() : null)}
                     {getStatusTag(task.status)}
                   </div>
                 </div>
@@ -1062,7 +997,7 @@ const Dashboard = () => {
           </div>
 
           {/* Task Trend Chart */}
-          <TaskTrendChart data={stats?.tasksByDay ?? []} />
+          <TaskTrendChart data={stats?.tasks_by_day ?? []} />
         </div>
 
         {/* Right Sidebar: Distribution Charts */}
@@ -1089,10 +1024,10 @@ const Dashboard = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {(() => {
                 const typeMap: Record<string, { label: string; color: string }> = {
-                  code_scan: { label: '代码扫描', color: '#5BA3FF' },
+                  vulnerability_detection: { label: '代码扫描', color: '#5BA3FF' },
                   malware_analysis: { label: '恶意分析', color: '#5EEAD4' },
                 }
-                const items = (stats?.tasksByType ?? []).map((t) => ({
+                const items = (stats?.tasks_by_type ?? []).map((t) => ({
                   label: typeMap[t.type]?.label ?? t.type,
                   color: typeMap[t.type]?.color ?? '#94A3B8',
                   count: t.count,
@@ -1160,7 +1095,7 @@ const Dashboard = () => {
                   low: { label: '低危', color: '#10B981' },
                   info: { label: '信息', color: '#94A3B8' },
                 }
-                const items = (stats?.tasksBySeverity ?? []).map((s) => ({
+                const items = (stats?.tasks_by_severity ?? []).map((s) => ({
                   label: severityMap[s.severity]?.label ?? s.severity,
                   color: severityMap[s.severity]?.color ?? '#94A3B8',
                   count: s.count,
@@ -1215,7 +1150,7 @@ const Dashboard = () => {
 
           {/* Activity Summary Mini Card */}
           <div
-            className={`gradient-bg${(stats?.highSeverityTasks ?? 0) > 0 ? ' animate-glow-pulse' : ''}`}
+            className={`gradient-bg${(stats?.high_severity_tasks ?? 0) > 0 ? ' animate-glow-pulse' : ''}`}
             style={{
               marginTop: '24px',
               borderRadius: '16px',
@@ -1228,10 +1163,10 @@ const Dashboard = () => {
               <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>安全概览</span>
             </div>
             <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: '12px', lineHeight: '1.6' }}>
-              共分析 <span style={{ fontWeight: 700, color: 'white' }}>{stats?.totalTasks ?? 0}</span> 个任务，
-              发现 <span style={{ fontWeight: 700, color: 'white' }}>{stats?.highSeverityTasks ?? 0}</span> 个高危漏洞。
-              {stats?.tasksByType && stats.tasksByType.length > 0 && (
-                <>最常见类型为 {stats.tasksByType.sort((a, b) => b.count - a.count)[0]?.type === 'code_scan' ? '代码扫描' : '恶意分析'}。</>
+              共分析 <span style={{ fontWeight: 700, color: 'white' }}>{stats?.total_tasks ?? 0}</span> 个任务，
+              发现 <span style={{ fontWeight: 700, color: 'white' }}>{stats?.high_severity_tasks ?? 0}</span> 个高危漏洞。
+              {stats?.tasks_by_type && stats.tasks_by_type.length > 0 && (
+                <>最常见类型为 {stats.tasks_by_type.sort((a, b) => b.count - a.count)[0]?.type === 'vulnerability_detection' ? '代码扫描' : '恶意分析'}。</>
               )}
             </div>
             <div style={{ marginTop: '16px' }}>
@@ -1239,8 +1174,8 @@ const Dashboard = () => {
                 <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>安全评分</span>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>
                   {(() => {
-                    const high = stats?.highSeverityTasks ?? 0
-                    const total = stats?.totalTasks ?? 1
+                    const high = stats?.high_severity_tasks ?? 0
+                    const total = stats?.total_tasks ?? 1
                     const score = Math.max(10, Math.round(100 - (high / total) * 100))
                     return `${score}/100`
                   })()}
@@ -1254,8 +1189,8 @@ const Dashboard = () => {
                     borderRadius: '9999px',
                     background: 'var(--bg-card)',
                     width: progressAnimated ? `${(() => {
-                      const high = stats?.highSeverityTasks ?? 0
-                      const total = stats?.totalTasks ?? 1
+                      const high = stats?.high_severity_tasks ?? 0
+                      const total = stats?.total_tasks ?? 1
                       return Math.max(10, Math.round(100 - (high / total) * 100))
                     })()}%` : '0%',
                   }}
@@ -1284,8 +1219,8 @@ const Dashboard = () => {
               </h3>
             </div>
             <div className="custom-scrollbar" style={{ maxHeight: '256px', overflowY: 'auto' }}>
-              {(stats?.recentTasks ?? []).slice(0, 6).map((task, idx) => {
-                const isLast = idx === Math.min((stats?.recentTasks?.length ?? 0) - 1, 5)
+              {(stats?.recent_tasks ?? []).slice(0, 6).map((task, idx) => {
+                const isLast = idx === Math.min((stats?.recent_tasks?.length ?? 0) - 1, 5)
                 const statusIcon = task.status === 'done'
                   ? <CheckCircle2 size={14} style={{ color: '#10B981' }} />
                   : task.status === 'analyzing'
@@ -1338,7 +1273,7 @@ const Dashboard = () => {
                     {/* Content */}
                     <div style={{ paddingBottom: isLast ? 0 : '16px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                        {task.name}
+                        {task.input_path ? task.input_path.split('/').pop() : task.input_content ? `代码片段 #${task.id}` : `任务 #${task.id}`}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -1346,7 +1281,7 @@ const Dashboard = () => {
                         </span>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>·</span>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                          {new Date(task.createdAt).toLocaleString('zh-CN', {
+                          {new Date(task.created_at).toLocaleString('zh-CN', {
                             month: '2-digit',
                             day: '2-digit',
                             hour: '2-digit',
@@ -1379,17 +1314,24 @@ const Dashboard = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
           {/* Chart 1: Risk Radar */}
           <div className="animate-slide-up" style={{ animationDelay: '460ms', animationFillMode: 'both' }}>
-            <RiskRadarChart data={[]} />
+            <RiskRadarChart data={[
+              { dimension: '代码质量', score: 72, fullMark: 100 },
+              { dimension: '认证', score: 85, fullMark: 100 },
+              { dimension: '授权', score: 60, fullMark: 100 },
+              { dimension: '数据保护', score: 45, fullMark: 100 },
+              { dimension: '加密', score: 78, fullMark: 100 },
+              { dimension: '日志', score: 55, fullMark: 100 },
+            ]} />
           </div>
           {/* Chart 2: Vuln Type Donut */}
           <div className="animate-slide-up" style={{ animationDelay: '520ms', animationFillMode: 'both' }}>
-            <VulnTypeDonutChart data={(stats?.tasksByType ?? []).map((t) => {
+            <VulnTypeDonutChart data={(stats?.tasks_by_type ?? []).map((t) => {
               const typeColorMap: Record<string, string> = {
-                code_scan: '#5BA3FF',
+                vulnerability_detection: '#5BA3FF',
                 malware_analysis: '#5EEAD4',
               }
               const typeLabelMap: Record<string, string> = {
-                code_scan: '代码扫描',
+                vulnerability_detection: '代码扫描',
                 malware_analysis: '恶意分析',
               }
               return { name: typeLabelMap[t.type] ?? t.type, value: t.count, color: typeColorMap[t.type] ?? '#94A3B8' }
@@ -1397,7 +1339,7 @@ const Dashboard = () => {
           </div>
           {/* Chart 3: Severity Bar */}
           <div className="animate-slide-up" style={{ animationDelay: '580ms', animationFillMode: 'both' }}>
-            <SeverityBarChart data={(stats?.tasksBySeverity ?? []).map((s) => {
+            <SeverityBarChart data={(stats?.tasks_by_severity ?? []).map((s) => {
               const sevColorMap: Record<string, string> = {
                 high: '#EF4444',
                 medium: '#F59E0B',
@@ -1415,7 +1357,7 @@ const Dashboard = () => {
           </div>
           {/* Chart 4: Task Trend */}
           <div className="animate-slide-up" style={{ animationDelay: '640ms', animationFillMode: 'both' }}>
-            <TaskTrendChart data={stats?.tasksByDay ?? []} />
+            <TaskTrendChart data={stats?.tasks_by_day ?? []} />
           </div>
           {/* Chart 5: Success Rate */}
           <div className="animate-slide-up" style={{ animationDelay: '700ms', animationFillMode: 'both' }}>
@@ -1423,7 +1365,7 @@ const Dashboard = () => {
           </div>
           {/* Chart 6: Duration Distribution */}
           <div className="animate-slide-up" style={{ animationDelay: '760ms', animationFillMode: 'both' }}>
-            <DurationDistChart tasks={stats?.recentTasks ?? []} />
+            <DurationDistChart tasks={stats?.recent_tasks ?? []} />
           </div>
         </div>
       </div>

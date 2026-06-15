@@ -14,6 +14,7 @@ from ..models import (
     Task,
     TaskType,
     TaskStatus,
+    AnalysisStep,
     CreateTaskRequest,
     CreateTaskResponse,
     TaskResponse,
@@ -23,6 +24,7 @@ from ..models import (
     TaskTypeEnum,
     TaskStatusEnum,
     AnalysisStepResponse,
+    ConversationResponse,
 )
 from ..report import generate_pdf, render_markdown
 from ..services.conversation import ConversationManager
@@ -70,15 +72,39 @@ def list_tasks(
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
     type: Optional[TaskTypeEnum] = Query(None, description="按任务类型筛选"),
     status: Optional[TaskStatusEnum] = Query(None, description="按任务状态筛选"),
+    search: Optional[str] = Query(None, description="搜索任务名称或 ID"),
+    date_from: Optional[str] = Query(None, description="起始日期 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
 ):
-    """查询历史任务列表，支持分页和按类型/状态筛选。按创建时间倒序排列。"""
+    """查询历史任务列表，支持分页、搜索和按类型/状态/时间范围筛选。按创建时间倒序排列。"""
+    from datetime import datetime as dt
+
     query = db.query(Task)
 
     if type:
         query = query.filter(Task.type == TaskType(type.value))
     if status:
         query = query.filter(Task.status == TaskStatus(status.value))
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Task.input_path.ilike(search_term)) |
+            (Task.input_content.ilike(search_term)) |
+            (Task.id.cast(db.String).ilike(search_term))  # type: ignore[attr-defined]
+        )
+    if date_from:
+        try:
+            start_date = dt.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(Task.created_at >= start_date)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            end_date = dt.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            query = query.filter(Task.created_at <= end_date)
+        except ValueError:
+            pass
 
     total = query.count()
     tasks = (
@@ -157,6 +183,21 @@ def get_task_steps(task_id: int, db: Session = Depends(get_db)):
 
 
 # ============================================================================
+# 对话历史
+# ============================================================================
+
+@router.get("/{task_id}/conversations", response_model=list[ConversationResponse])
+def get_conversations(task_id: int, db: Session = Depends(get_db)):
+    """获取指定任务的对话历史，按时间正序排列。"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
+    conversations = conv_manager.load_history(task_id)
+    return conversations
+
+
+# ============================================================================
 # 对话追问
 # ============================================================================
 
@@ -210,6 +251,31 @@ def chat_with_task(
     conv_manager.add_message(task_id, "assistant", reply_text)
 
     return SendMessageResponse(reply=reply_text, task_id=task_id)
+
+
+# ============================================================================
+# 删除任务
+# ============================================================================
+
+@router.delete("/{task_id}")
+def delete_task(task_id: int, db: Session = Depends(get_db)):
+    """删除指定任务及其关联的分析步骤和对话记录。"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
+    # 删除关联的对话记录
+    conv_manager.delete_history(task_id)
+
+    # 删除关联的分析步骤
+    db.query(AnalysisStep).filter(AnalysisStep.task_id == task_id).delete()
+
+    # 删除任务本身
+    db.delete(task)
+    db.commit()
+
+    logger.info("任务 %d 已删除", task_id)
+    return {"message": f"任务 {task_id} 已成功删除"}
 
 
 # ============================================================================

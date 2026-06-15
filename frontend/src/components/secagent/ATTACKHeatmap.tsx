@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
+import { Download } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────
 export interface ATTCKTechnique {
@@ -316,6 +317,7 @@ function HeatmapTooltip({
 
 // ─── Main Component ─────────────────────────────────
 export default function ATTACKHeatmap({ techniques }: ATTACKHeatmapProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const [tooltip, setTooltip] = useState<{
     visible: boolean
     x: number
@@ -329,6 +331,32 @@ export default function ATTACKHeatmap({ techniques }: ATTACKHeatmapProps) {
       description?: string
     } | null
   }>({ visible: false, x: 0, y: 0, technique: null })
+
+  const exportToImage = useCallback(() => {
+    if (!containerRef.current) return
+    const el = containerRef.current
+    const svgElement = el.querySelector('svg')
+    if (svgElement) {
+      const svgData = new XMLSerializer().serializeToString(svgElement)
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      const img = new Image()
+      img.onload = () => {
+        canvas.width = img.width * 2
+        canvas.height = img.height * 2
+        ctx.scale(2, 2)
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim() || '#ffffff'
+        ctx.fillRect(0, 0, img.width, img.height)
+        ctx.drawImage(img, 0, 0)
+        const link = document.createElement('a')
+        link.download = 'ATTACK热力图.png'
+        link.href = canvas.toDataURL('image/png')
+        link.click()
+      }
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
+    }
+  }, [])
 
   // Build lookup map from detected techniques
   const techniqueMap = useMemo(() => {
@@ -445,6 +473,7 @@ export default function ATTACKHeatmap({ techniques }: ATTACKHeatmapProps) {
 
   return (
     <div
+      ref={containerRef}
       className="animate-slide-up"
       style={{
         borderRadius: '16px',
@@ -478,6 +507,33 @@ export default function ATTACKHeatmap({ techniques }: ATTACKHeatmapProps) {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={exportToImage}
+              title="导出为图片"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-light)',
+                background: 'var(--bg-card)',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border-focus)'
+                e.currentTarget.style.color = 'var(--accent-start)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border-light)'
+                e.currentTarget.style.color = 'var(--text-muted)'
+              }}
+            >
+              <Download size={13} style={{ color: 'inherit' }} />
+            </button>
             <span
               style={{
                 display: 'inline-flex',

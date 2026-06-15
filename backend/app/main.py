@@ -2,13 +2,14 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from .api import tasks_router, upload_router
 from .middleware import RateLimitMiddleware
-from .models import init_db
+from .models import init_db, get_db
 from .websocket import manager
 
 load_dotenv()
@@ -62,6 +63,97 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """获取仪表盘统计数据：总任务数、今日任务数、高危数、平均耗时、近期任务等。"""
+    from .models import Task, TaskStatus, TaskType, TaskResponse
+    from .models.database import AnalysisStep, Conversation
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    from sqlalchemy.orm import load_only, noload
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # 总任务数
+    total_tasks = db.query(func.count(Task.id)).scalar() or 0
+
+    # 今日任务数
+    today_tasks = db.query(func.count(Task.id)).filter(Task.created_at >= today_start).scalar() or 0
+
+    # 高危任务数（从 result_json 中提取 severity）
+    all_done_tasks = db.query(Task).filter(Task.status == TaskStatus.DONE).all()
+    high_severity_count = 0
+    durations = []
+    for t in all_done_tasks:
+        if t.result_json:
+            try:
+                import json
+                result = json.loads(t.result_json)
+                if result.get("severity") == "high":
+                    high_severity_count += 1
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        if t.created_at and t.updated_at:
+            diff = (t.updated_at - t.created_at).total_seconds()
+            if diff > 0:
+                durations.append(diff)
+
+    # 平均耗时
+    avg_duration = f"{sum(durations) / len(durations):.0f}s" if durations else "—"
+
+    # 近期任务（最近5个，不加载关联数据）
+    recent_tasks = (
+        db.query(Task)
+        .options(noload(Task.analysis_steps), noload(Task.conversations))
+        .order_by(Task.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    # 按类型统计
+    tasks_by_type = []
+    for t_type in [TaskType.VULNERABILITY_DETECTION, TaskType.MALWARE_ANALYSIS]:
+        count = db.query(func.count(Task.id)).filter(Task.type == t_type).scalar() or 0
+        tasks_by_type.append({"type": t_type.value, "count": count})
+
+    # 按严重等级统计
+    severity_counts = {"high": 0, "medium": 0, "low": 0, "info": 0}
+    for t in all_done_tasks:
+        if t.result_json:
+            try:
+                import json
+                result = json.loads(t.result_json)
+                sev = result.get("severity", "info")
+                if sev in severity_counts:
+                    severity_counts[sev] += 1
+            except (json.JSONDecodeError, AttributeError):
+                pass
+    tasks_by_severity = [{"severity": k, "count": v} for k, v in severity_counts.items()]
+
+    # 按天统计（最近7天）
+    tasks_by_day = []
+    for i in range(6, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        day_start = datetime.strptime(day, "%Y-%m-%d")
+        day_end = day_start + timedelta(days=1)
+        count = db.query(func.count(Task.id)).filter(
+            Task.created_at >= day_start, Task.created_at < day_end
+        ).scalar() or 0
+        tasks_by_day.append({"date": day, "count": count})
+
+    return {
+        "total_tasks": total_tasks,
+        "today_tasks": today_tasks,
+        "high_severity_tasks": high_severity_count,
+        "avg_duration": avg_duration,
+        "recent_tasks": recent_tasks,
+        "tasks_by_type": tasks_by_type,
+        "tasks_by_severity": tasks_by_severity,
+        "tasks_by_day": tasks_by_day,
+    }
+
+
 # ---------------------------------------------------------------------------
 # WebSocket 端点 — 实时推送 Agent 分析过程
 # ---------------------------------------------------------------------------
@@ -84,8 +176,10 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
     try:
         await websocket.send_json({
             "type": "connected",
-            "task_id": task_id,
-            "message": "已订阅任务分析过程，等待分析开始...",
+            "data": {
+                "task_id": task_id,
+                "message": "已订阅任务分析过程，等待分析开始...",
+            },
         })
         while True:
             try:

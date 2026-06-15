@@ -16,7 +16,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
 } from 'recharts'
+import { useRef, useCallback } from 'react'
+import { Download } from 'lucide-react'
 
 // ─── Custom Tooltip ─────────────────────────────────
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color?: string }>; label?: string }) {
@@ -56,15 +59,102 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   )
 }
 
+// ─── 导出为图片工具函数 ──────────────────────────────
+function useChartExport() {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const exportToImage = useCallback((title: string) => {
+    if (!containerRef.current) return
+
+    // 使用 SVG foreignObject 方式导出
+    const svgElement = containerRef.current.querySelector('.recharts-wrapper svg')
+    if (!svgElement) return
+
+    const svgData = new XMLSerializer().serializeToString(svgElement)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const img = new Image()
+    img.onload = () => {
+      canvas.width = img.width * 2
+      canvas.height = img.height * 2
+      ctx.scale(2, 2)
+      // 绘制白色背景
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim() || '#ffffff'
+      ctx.fillRect(0, 0, img.width, img.height)
+      ctx.drawImage(img, 0, 0)
+
+      const link = document.createElement('a')
+      link.download = `${title}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    }
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
+  }, [])
+
+  return { containerRef, exportToImage }
+}
+
+// ─── 导出按钮组件 ────────────────────────────────────
+function ExportButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+      title="导出为图片"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '28px',
+        height: '28px',
+        borderRadius: '8px',
+        border: '1px solid var(--border-light)',
+        background: 'var(--bg-card)',
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+        flexShrink: 0,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border-focus)'
+        e.currentTarget.style.color = 'var(--accent-start)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border-light)'
+        e.currentTarget.style.color = 'var(--text-muted)'
+      }}
+    >
+      <Download size={13} style={{ color: 'inherit' }} />
+    </button>
+  )
+}
+
+// ─── 风险雷达图默认6维度 ────────────────────────────
+export const DEFAULT_RISK_DIMENSIONS = [
+  { dimension: '代码质量', score: 0, fullMark: 100 },
+  { dimension: '认证', score: 0, fullMark: 100 },
+  { dimension: '授权', score: 0, fullMark: 100 },
+  { dimension: '数据保护', score: 0, fullMark: 100 },
+  { dimension: '加密', score: 0, fullMark: 100 },
+  { dimension: '日志', score: 0, fullMark: 100 },
+]
+
 // ─── Risk Radar Chart Component ─────────────────────
 interface RiskRadarChartProps {
   data: Array<{ dimension: string; score: number; fullMark?: number }>
 }
 
 export function RiskRadarChart({ data }: RiskRadarChartProps) {
-  const hasData = data && data.length > 0
+  const { containerRef, exportToImage } = useChartExport()
+  // 如果没有数据，使用默认6维度（分数为0）
+  const chartData = data && data.length > 0 ? data : DEFAULT_RISK_DIMENSIONS
+  const hasData = data && data.length > 0 && data.some(d => d.score > 0)
   return (
     <div
+      ref={containerRef}
       style={{
         borderRadius: '16px',
         border: '1px solid var(--border-light)',
@@ -73,29 +163,34 @@ export function RiskRadarChart({ data }: RiskRadarChartProps) {
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      <h3
-        style={{
-          marginBottom: '4px',
-          fontWeight: 600,
-          fontSize: '16px',
-          color: 'var(--text-primary)',
-        }}
-      >
-        风险雷达图
-      </h3>
-      <p
-        style={{
-          marginBottom: '16px',
-          fontSize: '12px',
-          color: 'var(--text-muted)',
-        }}
-      >
-        多维度安全评分概览
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <h3
+            style={{
+              marginBottom: '4px',
+              fontWeight: 600,
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+            }}
+          >
+            风险雷达图
+          </h3>
+          <p
+            style={{
+              marginBottom: '16px',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            多维度安全评分概览
+          </p>
+        </div>
+        {hasData && <ExportButton onClick={() => exportToImage('风险雷达图')} />}
+      </div>
       {hasData ? (
         <>
           <ResponsiveContainer width="100%" height={280}>
-            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
+            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
               <PolarGrid
                 stroke="rgba(148,163,184,0.12)"
                 strokeDasharray="3 3"
@@ -125,11 +220,12 @@ export function RiskRadarChart({ data }: RiskRadarChartProps) {
                 fillOpacity={0.15}
                 strokeWidth={2}
               />
+              <Tooltip content={<CustomTooltip />} />
             </RadarChart>
           </ResponsiveContainer>
           {/* Score indicators below */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '8px' }}>
-            {data.map((item) => (
+            {chartData.map((item) => (
               <div
                 key={item.dimension}
                 style={{
@@ -165,23 +261,45 @@ export function RiskRadarChart({ data }: RiskRadarChartProps) {
           </div>
         </>
       ) : (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 280,
-            color: 'var(--text-muted)',
-          }}
-        >
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '12px', opacity: 0.4 }}>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 16v-4" />
-            <path d="M12 8h.01" />
-          </svg>
-          <span style={{ fontSize: '13px' }}>暂无数据</span>
-        </div>
+        <>
+          <ResponsiveContainer width="100%" height={280}>
+            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={DEFAULT_RISK_DIMENSIONS}>
+              <PolarGrid
+                stroke="rgba(148,163,184,0.08)"
+                strokeDasharray="3 3"
+              />
+              <PolarAngleAxis
+                dataKey="dimension"
+                tick={{
+                  fill: '#64748B',
+                  fontSize: 11,
+                  fontWeight: 500,
+                }}
+              />
+              <PolarRadiusAxis
+                angle={90}
+                domain={[0, 100]}
+                tick={{
+                  fill: '#94A3B8',
+                  fontSize: 9,
+                }}
+                axisLine={false}
+              />
+              <Radar
+                name="安全评分"
+                dataKey="score"
+                stroke="rgba(148,163,184,0.2)"
+                fill="rgba(148,163,184,0.05)"
+                fillOpacity={1}
+                strokeWidth={1}
+                strokeDasharray="5 5"
+              />
+            </RadarChart>
+          </ResponsiveContainer>
+          <div style={{ textAlign: 'center', marginTop: '4px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>等待分析数据...</span>
+          </div>
+        </>
       )}
     </div>
   )
@@ -193,10 +311,12 @@ interface VulnTypeDonutChartProps {
 }
 
 export function VulnTypeDonutChart({ data }: VulnTypeDonutChartProps) {
+  const { containerRef, exportToImage } = useChartExport()
   const hasData = data && data.length > 0
   const total = data.reduce((s, d) => s + d.value, 0)
   return (
     <div
+      ref={containerRef}
       style={{
         borderRadius: '16px',
         border: '1px solid var(--border-light)',
@@ -205,25 +325,30 @@ export function VulnTypeDonutChart({ data }: VulnTypeDonutChartProps) {
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      <h3
-        style={{
-          marginBottom: '4px',
-          fontWeight: 600,
-          fontSize: '16px',
-          color: 'var(--text-primary)',
-        }}
-      >
-        漏洞类型分布
-      </h3>
-      <p
-        style={{
-          marginBottom: '16px',
-          fontSize: '12px',
-          color: 'var(--text-muted)',
-        }}
-      >
-        按漏洞类型统计发现数量
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <h3
+            style={{
+              marginBottom: '4px',
+              fontWeight: 600,
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+            }}
+          >
+            漏洞类型分布
+          </h3>
+          <p
+            style={{
+              marginBottom: '16px',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            按漏洞类型统计发现数量
+          </p>
+        </div>
+        {hasData && <ExportButton onClick={() => exportToImage('漏洞类型分布')} />}
+      </div>
       {hasData ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ position: 'relative', width: '140px', height: '140px', flexShrink: 0 }}>
@@ -243,6 +368,7 @@ export function VulnTypeDonutChart({ data }: VulnTypeDonutChartProps) {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
+                <Tooltip content={<CustomTooltip />} />
                 {/* Center text */}
                 <text
                   x="50%"
@@ -325,8 +451,10 @@ interface TaskTrendChartProps {
 }
 
 export function TaskTrendChart({ data }: TaskTrendChartProps) {
+  const { containerRef, exportToImage } = useChartExport()
   return (
     <div
+      ref={containerRef}
       style={{
         borderRadius: '16px',
         border: '1px solid var(--border-light)',
@@ -366,6 +494,7 @@ export function TaskTrendChart({ data }: TaskTrendChartProps) {
             总计 {data.reduce((s, d) => s + d.count, 0)}
           </span>
         </div>
+        <ExportButton onClick={() => exportToImage('近7天任务趋势')} />
       </div>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart
@@ -429,9 +558,11 @@ interface SeverityBarChartProps {
 }
 
 export function SeverityBarChart({ data }: SeverityBarChartProps) {
+  const { containerRef, exportToImage } = useChartExport()
   const hasData = data && data.length > 0
   return (
     <div
+      ref={containerRef}
       style={{
         borderRadius: '16px',
         border: '1px solid var(--border-light)',
@@ -440,25 +571,30 @@ export function SeverityBarChart({ data }: SeverityBarChartProps) {
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      <h3
-        style={{
-          marginBottom: '4px',
-          fontWeight: 600,
-          fontSize: '16px',
-          color: 'var(--text-primary)',
-        }}
-      >
-        严重等级分布
-      </h3>
-      <p
-        style={{
-          marginBottom: '16px',
-          fontSize: '12px',
-          color: 'var(--text-muted)',
-        }}
-      >
-        按严重程度统计漏洞数量
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <h3
+            style={{
+              marginBottom: '4px',
+              fontWeight: 600,
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+            }}
+          >
+            严重等级分布
+          </h3>
+          <p
+            style={{
+              marginBottom: '16px',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            按严重程度统计漏洞数量
+          </p>
+        </div>
+        {hasData && <ExportButton onClick={() => exportToImage('严重等级分布')} />}
+      </div>
       {hasData ? (
         <ResponsiveContainer width="100%" height={200}>
           <BarChart
@@ -531,6 +667,7 @@ interface TaskSuccessRateChartProps {
 }
 
 export function TaskSuccessRateChart({ data }: TaskSuccessRateChartProps) {
+  const { containerRef, exportToImage } = useChartExport()
   const chartData = [
     { name: '已完成', value: data.done, color: '#10B981' },
     { name: '失败', value: data.failed, color: '#EF4444' },
@@ -543,6 +680,7 @@ export function TaskSuccessRateChart({ data }: TaskSuccessRateChartProps) {
 
   return (
     <div
+      ref={containerRef}
       style={{
         borderRadius: '16px',
         border: '1px solid var(--border-light)',
@@ -551,25 +689,30 @@ export function TaskSuccessRateChart({ data }: TaskSuccessRateChartProps) {
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      <h3
-        style={{
-          marginBottom: '4px',
-          fontWeight: 600,
-          fontSize: '16px',
-          color: 'var(--text-primary)',
-        }}
-      >
-        任务成功率
-      </h3>
-      <p
-        style={{
-          marginBottom: '16px',
-          fontSize: '12px',
-          color: 'var(--text-muted)',
-        }}
-      >
-        任务完成状态分布
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <h3
+            style={{
+              marginBottom: '4px',
+              fontWeight: 600,
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+            }}
+          >
+            任务成功率
+          </h3>
+          <p
+            style={{
+              marginBottom: '16px',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            任务完成状态分布
+          </p>
+        </div>
+        <ExportButton onClick={() => exportToImage('任务成功率')} />
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         <div style={{ position: 'relative', width: '140px', height: '140px', flexShrink: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -656,6 +799,7 @@ interface DurationDistChartProps {
 }
 
 export function DurationDistChart({ tasks }: DurationDistChartProps) {
+  const { containerRef, exportToImage } = useChartExport()
   // Compute duration buckets from task data
   const buckets = { under30: 0, '30to60': 0, '1to5': 0, over5: 0 }
 
@@ -685,6 +829,7 @@ export function DurationDistChart({ tasks }: DurationDistChartProps) {
 
   return (
     <div
+      ref={containerRef}
       style={{
         borderRadius: '16px',
         border: '1px solid var(--border-light)',
@@ -693,25 +838,30 @@ export function DurationDistChart({ tasks }: DurationDistChartProps) {
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      <h3
-        style={{
-          marginBottom: '4px',
-          fontWeight: 600,
-          fontSize: '16px',
-          color: 'var(--text-primary)',
-        }}
-      >
-        分析耗时分布
-      </h3>
-      <p
-        style={{
-          marginBottom: '16px',
-          fontSize: '12px',
-          color: 'var(--text-muted)',
-        }}
-      >
-        任务分析时长统计
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <h3
+            style={{
+              marginBottom: '4px',
+              fontWeight: 600,
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+            }}
+          >
+            分析耗时分布
+          </h3>
+          <p
+            style={{
+              marginBottom: '16px',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            任务分析时长统计
+          </p>
+        </div>
+        <ExportButton onClick={() => exportToImage('分析耗时分布')} />
+      </div>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart
           data={chartData}

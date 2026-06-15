@@ -38,6 +38,8 @@ export interface UseWebSocketReturn {
   disconnect: () => void;
   /** 手动重连 */
   reconnect: () => void;
+  /** 是否正在重连 */
+  isReconnecting: boolean;
 }
 
 /**
@@ -64,6 +66,7 @@ export function useWebSocket(
   const [readyState, setReadyState] = useState<number>(WebSocket.CONNECTING);
   const [messages, setMessages] = useState<WSMessage[]>([]);
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectCountRef = useRef(0);
@@ -122,6 +125,7 @@ export function useWebSocket(
 
     ws.onopen = () => {
       setReadyState(WebSocket.OPEN);
+      setIsReconnecting(false);
       reconnectCountRef.current = 0;
       onOpen?.();
     };
@@ -162,6 +166,7 @@ export function useWebSocket(
         reconnectCountRef.current < maxReconnectAttempts
       ) {
         reconnectCountRef.current += 1;
+        setIsReconnecting(true);
         reconnectTimerRef.current = setTimeout(() => {
           connect();
         }, reconnectInterval);
@@ -204,6 +209,7 @@ export function useWebSocket(
     sendMessage,
     disconnect,
     reconnect,
+    isReconnecting,
   };
 }
 

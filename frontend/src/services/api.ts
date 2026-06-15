@@ -36,10 +36,15 @@ apiClient.interceptors.response.use(
       console.error('请求参数错误:', data?.detail || error.message);
     } else if (status === 413) {
       console.error('文件大小超出限制');
+      // 将413错误转为用户友好的错误消息
+      const friendlyError = new Error('文件大小超出 50MB 限制，请选择更小的文件');
+      return Promise.reject(friendlyError);
     } else if (status === 429) {
       console.error('请求过于频繁，请稍后重试');
     } else if (!error.response) {
       console.error('网络错误，请检查网络连接');
+      const friendlyError = new Error('网络连接失败，请检查网络后重试');
+      return Promise.reject(friendlyError);
     } else {
       console.error('请求失败:', error.message);
     }
@@ -96,6 +101,9 @@ export interface TaskListParams {
   page_size?: number;
   type?: TaskType;
   status?: TaskStatus;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
 }
 
 export interface SendMessageParams {
@@ -105,6 +113,14 @@ export interface SendMessageParams {
 export interface SendMessageResponse {
   reply: string;
   task_id: number;
+}
+
+export interface ConversationResponse {
+  id: number;
+  task_id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
 }
 
 export interface UploadResponse {
@@ -120,33 +136,19 @@ export interface QueueStatus {
   pending_count: number;
   analyzing_count: number;
   max_concurrent: number;
-}
-
-export interface StatsTask {
-  id: string;
-  type: 'code_scan' | 'malware_analysis';
-  status: 'pending' | 'analyzing' | 'done' | 'failed';
-  name: string;
-  inputPath: string | null;
-  inputContent: string | null;
-  language: string | null;
-  resultJson: string | null;
-  severity: 'high' | 'medium' | 'low' | 'info' | null;
-  vulnCount: number;
-  duration: string | null;
-  createdAt: string;
-  updatedAt: string;
+  celery_active?: number;
+  celery_reserved?: number;
 }
 
 export interface StatsResponse {
-  totalTasks: number;
-  todayTasks: number;
-  highSeverityTasks: number;
-  avgDuration: string;
-  recentTasks: StatsTask[];
-  tasksByType: Array<{ type: string; count: number }>;
-  tasksBySeverity: Array<{ severity: string; count: number }>;
-  tasksByDay: Array<{ date: string; count: number }>;
+  total_tasks: number;
+  today_tasks: number;
+  high_severity_tasks: number;
+  avg_duration: string;
+  recent_tasks: TaskResponse[];
+  tasks_by_type: Array<{ type: string; count: number }>;
+  tasks_by_severity: Array<{ severity: string; count: number }>;
+  tasks_by_day: Array<{ date: string; count: number }>;
 }
 
 // ==================== API 方法 ====================
@@ -167,9 +169,15 @@ export const getTask = (taskId: number) =>
 export const getTaskSteps = (taskId: number) =>
   apiClient.get<AnalysisStep[]>(`/tasks/${taskId}/steps`);
 
-/** 发送追问消息 */
+/** 发送追问消息（超时60秒，LLM响应可能较慢） */
 export const sendMessage = (taskId: number, params: SendMessageParams) =>
-  apiClient.post<SendMessageResponse>(`/tasks/${taskId}/chat`, params);
+  apiClient.post<SendMessageResponse>(`/tasks/${taskId}/chat`, params, {
+    timeout: 60000,
+  });
+
+/** 获取对话历史 */
+export const getConversations = (taskId: number) =>
+  apiClient.get<ConversationResponse[]>(`/tasks/${taskId}/conversations`);
 
 /** 下载 PDF 报告 */
 export const downloadPdfReport = (taskId: number) =>
@@ -200,9 +208,5 @@ export const fetchStats = () =>
 /** 删除任务 */
 export const deleteTask = (taskId: number) =>
   apiClient.delete(`/tasks/${taskId}`);
-
-/** 触发任务分析 */
-export const triggerAnalysis = (taskId: number) =>
-  apiClient.post(`/tasks/${taskId}/analyze`);
 
 export default apiClient;

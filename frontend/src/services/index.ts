@@ -10,9 +10,9 @@ export type {
   TaskListParams,
   SendMessageParams,
   SendMessageResponse,
+  ConversationResponse,
   UploadResponse,
   QueueStatus,
-  StatsTask,
   StatsResponse,
 } from './api';
 export {
@@ -21,11 +21,11 @@ export {
   getTask,
   getTaskSteps,
   sendMessage,
+  getConversations,
   downloadPdfReport,
   downloadMdReport,
   uploadFile,
   getQueueStatus,
   deleteTask,
-  triggerAnalysis,
   fetchStats,
 } from './api';

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { message, Modal, Spin } from 'antd';
+import { message, Modal, Spin, DatePicker } from 'antd';
+import type { Dayjs } from 'dayjs';
 import {
   Search,
   Trash2,
@@ -10,9 +11,14 @@ import {
   ChevronRight,
   AlertTriangle,
   Eye,
+  Calendar,
+  X,
+  RefreshCw,
 } from 'lucide-react';
-import { getTaskList, deleteTask } from '@/services/api';
-import type { TaskResponse } from '@/services/api';
+import { getTaskList, deleteTask } from '../services/api';
+import type { TaskResponse } from '../services/api';
+
+const { RangePicker } = DatePicker;
 
 // ─── Status Helpers ─────────────────────────────────
 function getStatusBadge(status: string) {
@@ -106,19 +112,33 @@ function getTaskDuration(task: TaskResponse): string {
   return '—';
 }
 
+// ─── Pagination helper: generate visible page numbers ────
+function getPageNumbers(current: number, total: number): (number | '...')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | '...')[] = [1];
+  if (current > 3) pages.push('...');
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (current < total - 2) pages.push('...');
+  pages.push(total);
+  return pages;
+}
+
 // ─── Component ──────────────────────────────────────
 const History = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'vulnerability_detection' | 'malware_analysis'>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'done' | 'analyzing' | 'failed'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'done' | 'analyzing' | 'failed' | 'pending'>('all');
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [tasks, setTasks] = useState<TaskResponse[]>([]);
   const [totalTasks, setTotalTasks] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [, setIsBatchDeleting] = useState(false);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const pageSize = 8;
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -141,13 +161,17 @@ const History = () => {
     setIsLoading(true);
     setSelectedIds(new Set());
     try {
-      const res = await getTaskList({
+      const params: Record<string, unknown> = {
         page: currentPage,
         page_size: pageSize,
-        ...(filterType !== 'all' && { type: filterType }),
-        ...(filterStatus !== 'all' && { status: filterStatus }),
-        ...(debouncedSearch && { search: debouncedSearch }),
-      });
+      };
+      if (filterType !== 'all') params.type = filterType;
+      if (filterStatus !== 'all') params.status = filterStatus;
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (dateRange && dateRange[0]) params.date_from = dateRange[0].format('YYYY-MM-DD');
+      if (dateRange && dateRange[1]) params.date_to = dateRange[1].format('YYYY-MM-DD');
+
+      const res = await getTaskList(params as any);
       const data = res.data;
       setTasks(data.tasks);
       setTotalTasks(data.total);
@@ -157,7 +181,7 @@ const History = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, filterType, filterStatus, debouncedSearch, pageSize]);
+  }, [currentPage, filterType, filterStatus, debouncedSearch, dateRange, pageSize]);
 
   useEffect(() => {
     loadTasks();
@@ -207,7 +231,7 @@ const History = () => {
         page_size: pageSize,
         ...(filterType !== 'all' && { type: filterType }),
         ...(filterStatus !== 'all' && { status: filterStatus }),
-        ...(searchQuery && { search: searchQuery }),
+        ...(debouncedSearch && { search: debouncedSearch }),
       });
       const data = res.data;
       setTasks(data.tasks);
@@ -243,6 +267,16 @@ const History = () => {
       onOk: handleBatchDelete,
     });
   };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setFilterType('all');
+    setFilterStatus('all');
+    setDateRange(null);
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = filterType !== 'all' || filterStatus !== 'all' || debouncedSearch || dateRange;
 
   return (
     <div style={{ margin: '0 auto', width: '100%', maxWidth: '1200px', padding: '24px 16px' }}>
@@ -337,7 +371,6 @@ const History = () => {
                 setFilterType(opt.value);
                 setCurrentPage(1);
               }}
-              className={filterType === opt.value ? 'filter-pill-active' : ''}
               style={{
                 borderRadius: '8px',
                 padding: '8px 14px',
@@ -346,7 +379,7 @@ const History = () => {
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s',
-                background: filterType === opt.value ? 'white' : 'transparent',
+                background: filterType === opt.value ? 'var(--bg-card)' : 'transparent',
                 color: filterType === opt.value ? 'var(--accent-start)' : 'var(--text-secondary)',
                 boxShadow: filterType === opt.value ? 'var(--shadow-sm)' : 'none',
               }}
@@ -371,6 +404,7 @@ const History = () => {
             { value: 'done' as const, label: '完成' },
             { value: 'analyzing' as const, label: '分析中' },
             { value: 'failed' as const, label: '失败' },
+            { value: 'pending' as const, label: '等待中' },
           ].map((opt) => (
             <button
               key={opt.value}
@@ -378,7 +412,6 @@ const History = () => {
                 setFilterStatus(opt.value);
                 setCurrentPage(1);
               }}
-              className={filterStatus === opt.value ? 'filter-pill-active' : ''}
               style={{
                 borderRadius: '8px',
                 padding: '8px 14px',
@@ -387,7 +420,7 @@ const History = () => {
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s',
-                background: filterStatus === opt.value ? 'white' : 'transparent',
+                background: filterStatus === opt.value ? 'var(--bg-card)' : 'transparent',
                 color: filterStatus === opt.value ? 'var(--accent-start)' : 'var(--text-secondary)',
                 boxShadow: filterStatus === opt.value ? 'var(--shadow-sm)' : 'none',
               }}
@@ -396,6 +429,66 @@ const History = () => {
             </button>
           ))}
         </div>
+
+        {/* Date Range Picker */}
+        <RangePicker
+          value={dateRange}
+          onChange={(dates) => {
+            setDateRange(dates);
+            setCurrentPage(1);
+          }}
+          placeholder={['开始日期', '结束日期']}
+          style={{
+            borderRadius: '12px',
+            border: '1px solid var(--border-normal)',
+          }}
+          suffixIcon={<Calendar size={14} style={{ color: 'var(--text-muted)' }} />}
+          allowClear
+        />
+
+        {/* Clear Filters */}
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              fontSize: '12px',
+              fontWeight: 500,
+              border: '1px solid var(--border-normal)',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            <X size={12} />
+            清除筛选
+          </button>
+        )}
+
+        {/* Refresh */}
+        <button
+          onClick={() => loadTasks()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '8px',
+            padding: '8px',
+            border: '1px solid var(--border-normal)',
+            background: 'transparent',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}
+          title="刷新列表"
+        >
+          <RefreshCw size={14} />
+        </button>
       </div>
 
       {/* ─── Batch Action Bar ─── */}
@@ -433,6 +526,7 @@ const History = () => {
           <div style={{ flex: 1 }} />
           <button
             onClick={showBatchDeleteConfirm}
+            disabled={isBatchDeleting}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -444,11 +538,12 @@ const History = () => {
               color: 'white',
               background: '#EF4444',
               border: 'none',
-              cursor: 'pointer',
+              cursor: isBatchDeleting ? 'not-allowed' : 'pointer',
+              opacity: isBatchDeleting ? 0.6 : 1,
             }}
           >
             <Trash2 size={14} />
-            批量删除
+            {isBatchDeleting ? '删除中...' : '批量删除'}
           </button>
           <button
             onClick={() => setSelectedIds(new Set())}
@@ -466,7 +561,7 @@ const History = () => {
         </div>
       )}
 
-      {/* ─── Desktop Table Layout (hidden on mobile) ─── */}
+      {/* ─── Task Table ─── */}
       <div
         className="animate-slide-up"
         style={{
@@ -499,32 +594,27 @@ const History = () => {
               style={{ width: '16px', height: '16px', accentColor: '#5BA3FF', cursor: 'pointer' }}
             />
           </div>
-          <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-            任务名称
-          </div>
-          <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-            类型
-          </div>
-          <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-            风险等级
-          </div>
-          <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-            发现数
-          </div>
-          <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-            时间
-          </div>
-          <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', textAlign: 'right' }}>
-            操作
-          </div>
+          {['任务名称', '类型', '风险等级', '发现数', '时间', '操作'].map((label, i) => (
+            <div
+              key={label}
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--text-secondary)',
+                textAlign: i === 5 ? 'right' : 'left',
+              }}
+            >
+              {label}
+            </div>
+          ))}
         </div>
 
         {/* Table Body */}
         {isLoading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-            <Spin size="large" tip="加载中...">
-              <div style={{ padding: 50 }} />
-            </Spin>
+            <Spin size="large" />
           </div>
         ) : tasks.length === 0 ? (
           <div
@@ -538,15 +628,18 @@ const History = () => {
             }}
           >
             <Search size={40} style={{ marginBottom: '12px', opacity: 0.3 }} />
-            <p style={{ fontSize: '14px', fontWeight: 500 }}>未找到匹配的任务</p>
-            <p style={{ marginTop: '4px', fontSize: '12px' }}>请尝试调整搜索条件或筛选器</p>
+            <p style={{ fontSize: '14px', fontWeight: 500 }}>
+              {hasActiveFilters ? '未找到匹配的任务' : '暂无历史任务'}
+            </p>
+            <p style={{ marginTop: '4px', fontSize: '12px' }}>
+              {hasActiveFilters ? '请尝试调整搜索条件或筛选器' : '提交一个分析任务开始使用'}
+            </p>
           </div>
         ) : (
           <div>
             {tasks.map((task) => {
               const displayName = getTaskDisplayName(task);
               const duration = getTaskDuration(task);
-              // Derive severity and vulnCount from result_json if available
               let severity: string | null = null;
               let vulnCount = 0;
               if (task.result_json) {
@@ -562,7 +655,6 @@ const History = () => {
               return (
                 <div
                   key={task.id}
-                  className="table-row-hover"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '40px 3fr 1.5fr 1.5fr 0.8fr 1.5fr 0.8fr',
@@ -571,6 +663,17 @@ const History = () => {
                     borderBottom: '1px solid var(--border-light)',
                     padding: '16px 24px',
                     background: selectedIds.has(task.id) ? 'rgba(91,163,255,0.02)' : undefined,
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!selectedIds.has(task.id)) {
+                      e.currentTarget.style.background = 'rgba(148,163,184,0.02)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!selectedIds.has(task.id)) {
+                      e.currentTarget.style.background = '';
+                    }
                   }}
                 >
                   {/* Checkbox */}
@@ -619,7 +722,7 @@ const History = () => {
                         {displayName}
                       </div>
                       <div style={{ marginTop: '2px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {task.id} · {duration}
+                        #{task.id} · {duration}
                       </div>
                     </div>
                   </div>
@@ -693,7 +796,7 @@ const History = () => {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                    {task.status === 'done' && (
+                    {(task.status === 'done' || task.status === 'failed') && (
                       <button
                         onClick={() => navigate(`/report/${task.id}`)}
                         title="查看报告"
@@ -784,7 +887,7 @@ const History = () => {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {totalTasks > 0 && (
         <div
           className="animate-slide-up"
           style={{
@@ -800,7 +903,7 @@ const History = () => {
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             共 {totalTasks} 条记录，第 {currentPage} / {totalPages} 页
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
@@ -822,29 +925,38 @@ const History = () => {
               <ChevronLeft size={14} />
               上一页
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  width: '32px',
-                  height: '32px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  background: page === currentPage ? 'var(--accent-start)' : 'transparent',
-                  color: page === currentPage ? 'white' : 'var(--text-secondary)',
-                }}
-              >
-                {page}
-              </button>
-            ))}
+            {getPageNumbers(currentPage, totalPages).map((page, idx) =>
+              page === '...' ? (
+                <span
+                  key={`ellipsis-${idx}`}
+                  style={{ padding: '0 4px', color: 'var(--text-muted)', fontSize: '12px' }}
+                >
+                  ...
+                </span>
+              ) : (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    width: '32px',
+                    height: '32px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    background: page === currentPage ? 'var(--accent-start)' : 'transparent',
+                    color: page === currentPage ? 'white' : 'var(--text-secondary)',
+                  }}
+                >
+                  {page}
+                </button>
+              )
+            )}
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
