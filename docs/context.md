@@ -94,9 +94,9 @@
 
 选择Python作为主开发语言主要基于以下考虑：Python拥有丰富的AI/LLM生态（如openai SDK、langchain等），便于调用大模型API；同时Python也是安全领域的主流语言，semgrep、bandit、pefile、YARA等安全工具均提供Python接口；此外Python开发效率较高，适合6周的原型项目，且团队本科生对Python最为熟悉。
 
-**前端语言：TypeScript + React 18**
+**前端语言：TypeScript + React 19**
 
-前端采用TypeScript与React 18的组合，TypeScript能够提供类型安全，减少开发错误；React生态成熟，组件化开发可有效提高开发效率；Ant Design组件库提供专业的表格、表单、布局组件；ECharts能够满足安全数据可视化的需求。
+前端采用TypeScript与React 19的组合，TypeScript能够提供类型安全，减少开发错误；React生态成熟，组件化开发可有效提高开发效率；Ant Design组件库提供专业的表格、表单、布局组件；Recharts能够满足安全数据可视化的需求；Lucide React提供一致的图标体系。
 
 > **注**：虽然模板提及C++/Java/C#，但本项目的性质和团队技术栈更适合Python+TypeScript方案。Python在AI与安全领域的生态优势远超其他语言，前端展示需要Web技术栈，这比传统桌面GUI开发语言更适合本项目的"Web全栈应用"定位。
 

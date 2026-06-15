@@ -35,7 +35,7 @@
 - [X] `[C]` 创建 `backend/requirements.txt`，包含所有 Python 依赖
 - [X] `[C]` 创建 `backend/requirements.txt`：fastapi, uvicorn, websockets, httpx, sqlalchemy, python-multipart, reportlab, pefile, yara-python
 - [X] `[D]` 使用 Vite 创建 React + TypeScript 项目：`npm create vite@latest frontend -- --template react-ts`
-- [X] `[D]` 安装前端依赖：`npm install antd echarts echarts-for-react react-router-dom react-markdown highlight.js`
+- [X] `[D]` 安装前端依赖：`npm install antd @ant-design/icons lucide-react react-router-dom recharts axios dayjs`
 - [X] `[C]` 创建 `docker-compose.yml`（前端 Nginx + 后端 Uvicorn + Redis）
 - [X] `[全员]` 验证 `docker compose up` 后前后端均可访问
 
@@ -295,20 +295,20 @@
 
 ### 5.1 报告展示页面（成员 D，第1-2天）
 
-- [ ] `[D]` 实现报告基本信息区：分析时间、目标文件/代码名、分析耗时、风险等级徽标
-- [ ] `[D]` 实现漏洞列表组件：Ant Design Table + 危险等级颜色标签 + CWE 编号链接
-- [ ] `[D]` 实现漏洞详情展开行：代码片段（语法高亮）+ 修复建议
-- [ ] `[D]` 实现恶意分析结果组件：判定结果大标识（红/黄/绿）+ 置信度占比 + 行为描述
-- [ ] `[D]` 实现 IOC 清单表格：类型图标 + 值 + 威胁情报查询结果（已知恶意/未知）
-- [ ] `[D]` 实现 ATT&CK 技术映射展示：Tag 标签 + 战术阶段标注
-- [ ] `[D]` 实现 Markdown 全文预览 Tab
-- [ ] `[D]` 实现 PDF 下载按钮 + 下载进度
+- [x] `[D]` 实现报告基本信息区：分析时间、目标文件/代码名、分析耗时、风险等级徽标
+- [x] `[D]` 实现漏洞列表组件：Ant Design Table + 危险等级颜色标签 + CWE 编号链接
+- [x] `[D]` 实现漏洞详情展开行：代码片段（语法高亮）+ 修复建议
+- [x] `[D]` 实现恶意分析结果组件：判定结果大标识（红/黄/绿）+ 置信度占比 + 行为描述
+- [x] `[D]` 实现 IOC 清单表格：类型图标 + 值 + 威胁情报查询结果（已知恶意/未知）
+- [x] `[D]` 实现 ATT&CK 技术映射展示：Tag 标签 + 战术阶段标注
+- [x] `[D]` 实现 Markdown 全文预览 Tab
+- [x] `[D]` 实现 PDF 下载按钮 + 下载进度
 
 ### 5.2 可视化图表（成员 D，第2-3天）
 
 - [ ] `[D]` 实现风险雷达图组件：多维度安全评分（代码质量、认证、授权、数据保护、加密、日志）
-- [ ] `[D]` 实现漏洞类型分布饼图/环形图（ECharts）
-- [ ] `[D]` 实现 ATT&CK 热力图组件：用 ECharts Heatmap 展示战术×技术矩阵
+- [ ] `[D]` 实现漏洞类型分布饼图/环形图（Recharts）
+- [ ] `[D]` 实现 ATT&CK 热力图组件：用 Recharts Heatmap 展示战术×技术矩阵
 - [ ] `[D]` 实现漏洞严重等级柱状图：高危/中危/低危/信息
 - [ ] `[D]` 图表支持响应式、支持导出为图片、配色与主题一致
 

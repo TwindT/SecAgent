@@ -677,6 +677,173 @@ body {
   margin: 0;
 }
 
+/* ─── Dark Markdown Body Styles ────────────────── */
+.dark-markdown {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.dark-markdown h1,
+.dark-markdown h2,
+.dark-markdown h3,
+.dark-markdown h4,
+.dark-markdown h5,
+.dark-markdown h6 {
+  color: var(--text-primary);
+  margin-top: 24px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.dark-markdown h1 { font-size: 24px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; }
+.dark-markdown h2 { font-size: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 6px; }
+.dark-markdown h3 { font-size: 16px; }
+.dark-markdown p { margin-bottom: 12px; color: var(--text-secondary); }
+.dark-markdown a { color: var(--accent-start); text-decoration: none; }
+.dark-markdown a:hover { text-decoration: underline; }
+.dark-markdown code {
+  background: rgba(91,163,255,0.06);
+  color: var(--accent-start);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+.dark-markdown pre {
+  background: #1E293B;
+  border: 1px solid var(--border-normal);
+  border-radius: 12px;
+  padding: 16px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.dark-markdown pre code {
+  background: transparent;
+  color: #E2E8F0;
+  padding: 0;
+}
+.dark-markdown blockquote {
+  border-left: 3px solid var(--accent-start);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: var(--text-muted);
+}
+.dark-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+.dark-markdown th,
+.dark-markdown td {
+  border: 1px solid var(--border-normal);
+  padding: 8px 12px;
+  text-align: left;
+}
+.dark-markdown th {
+  background: rgba(148,163,184,0.06);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.dark-markdown td {
+  color: var(--text-secondary);
+}
+.dark-markdown ul,
+.dark-markdown ol {
+  padding-left: 24px;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+.dark-markdown li { margin-bottom: 4px; }
+.dark-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border-light);
+  margin: 24px 0;
+}
+.dark-markdown img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* ─── Ant Design Dark Table Override ────────────── */
+.dark-table .ant-table {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+.dark-table .ant-table-thead > tr > th {
+  background: rgba(148,163,184,0.04) !important;
+  color: var(--text-muted) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+.dark-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+.dark-table .ant-table-tbody > tr:hover > td {
+  background: rgba(91,163,255,0.02) !important;
+}
+.dark-table .ant-table-tbody > tr.ant-table-expanded-row > td {
+  background: rgba(148,163,184,0.02) !important;
+}
+.dark-table .ant-table-cell {
+  background: transparent !important;
+}
+.dark-table .ant-table-placeholder {
+  background: transparent !important;
+}
+.dark-table .ant-empty-description {
+  color: var(--text-muted) !important;
+}
+.dark-table .ant-pagination .ant-pagination-item {
+  background: var(--bg-card) !important;
+  border-color: var(--border-normal) !important;
+}
+.dark-table .ant-pagination .ant-pagination-item a {
+  color: var(--text-secondary) !important;
+}
+.dark-table .ant-pagination .ant-pagination-item-active {
+  border-color: var(--accent-start) !important;
+}
+.dark-table .ant-pagination .ant-pagination-item-active a {
+  color: var(--accent-start) !important;
+}
+.dark-table .ant-table-expand-icon {
+  color: var(--text-muted) !important;
+}
+
+/* ─── Ant Design Tabs Dark Override ─────────────── */
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+  background: rgba(148,163,184,0.04) !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-secondary) !important;
+}
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active {
+  background: var(--bg-card) !important;
+  border-color: var(--accent-start) !important;
+  color: var(--accent-start) !important;
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab {
+  color: var(--text-secondary) !important;
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--accent-start) !important;
+}
+.ant-tabs > .ant-tabs-nav::before {
+  border-color: var(--border-light) !important;
+}
+
+/* ─── Ant Design Tag Dark Override ──────────────── */
+.ant-tag {
+  border-radius: 8px;
+}
+
+/* ─── Ant Design Progress Dark Override ─────────── */
+.ant-progress-text {
+  color: var(--text-primary) !important;
+}
+
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   .animate-glow-pulse,

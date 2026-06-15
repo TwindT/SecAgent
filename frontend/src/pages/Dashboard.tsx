@@ -210,6 +210,155 @@ function ElapsedTimeCounter({ startTime }: { startTime: string }) {
   return <>{elapsed}</>
 }
 
+// ─── Mock 数据（前后端联调前用于展示效果） ──────────
+const MOCK_STATS: StatsResponse = {
+  totalTasks: 42,
+  todayTasks: 8,
+  highSeverityTasks: 5,
+  avgDuration: '2m 35s',
+  recentTasks: [
+    {
+      id: '1',
+      type: 'code_scan',
+      status: 'done',
+      name: '用户认证模块代码审计',
+      inputPath: 'auth_module.py',
+      inputContent: null,
+      language: 'python',
+      resultJson: null,
+      severity: 'high',
+      vulnCount: 3,
+      duration: '1m 52s',
+      createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+    },
+    {
+      id: '2',
+      type: 'malware_analysis',
+      status: 'done',
+      name: 'suspicious_payload.exe 恶意分析',
+      inputPath: 'suspicious_payload.exe',
+      inputContent: null,
+      language: null,
+      resultJson: null,
+      severity: 'high',
+      vulnCount: 7,
+      duration: '3m 18s',
+      createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+    },
+    {
+      id: '3',
+      type: 'code_scan',
+      status: 'analyzing',
+      name: '支付接口安全扫描',
+      inputPath: 'payment_api.py',
+      inputContent: null,
+      language: 'python',
+      resultJson: null,
+      severity: null,
+      vulnCount: 0,
+      duration: null,
+      createdAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+    },
+    {
+      id: '4',
+      type: 'malware_analysis',
+      status: 'done',
+      name: 'macro_doc.xlsx 宏分析',
+      inputPath: 'macro_doc.xlsx',
+      inputContent: null,
+      language: null,
+      resultJson: null,
+      severity: 'medium',
+      vulnCount: 2,
+      duration: '2m 45s',
+      createdAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 87 * 60 * 1000).toISOString(),
+    },
+    {
+      id: '5',
+      type: 'code_scan',
+      status: 'failed',
+      name: '前端 XSS 漏洞检测',
+      inputPath: 'dashboard.js',
+      inputContent: null,
+      language: 'javascript',
+      resultJson: null,
+      severity: null,
+      vulnCount: 0,
+      duration: null,
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: '6',
+      type: 'code_scan',
+      status: 'done',
+      name: '数据库查询模块审计',
+      inputPath: 'db_queries.py',
+      inputContent: null,
+      language: 'python',
+      resultJson: null,
+      severity: 'medium',
+      vulnCount: 2,
+      duration: '1m 30s',
+      createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 3 * 60 * 60 * 1000 + 90 * 1000).toISOString(),
+    },
+    {
+      id: '7',
+      type: 'malware_analysis',
+      status: 'done',
+      name: 'keygen.exe 密钥生成器分析',
+      inputPath: 'keygen.exe',
+      inputContent: null,
+      language: null,
+      resultJson: null,
+      severity: 'high',
+      vulnCount: 5,
+      duration: '4m 10s',
+      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 5 * 60 * 60 * 1000 + 250 * 1000).toISOString(),
+    },
+    {
+      id: '8',
+      type: 'code_scan',
+      status: 'pending',
+      name: '配置文件硬编码检测',
+      inputPath: 'config.py',
+      inputContent: null,
+      language: 'python',
+      resultJson: null,
+      severity: null,
+      vulnCount: 0,
+      duration: null,
+      createdAt: new Date(Date.now() - 10 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 10 * 1000).toISOString(),
+    },
+  ],
+  tasksByType: [
+    { type: 'code_scan', count: 28 },
+    { type: 'malware_analysis', count: 14 },
+  ],
+  tasksBySeverity: [
+    { severity: 'high', count: 5 },
+    { severity: 'medium', count: 12 },
+    { severity: 'low', count: 18 },
+    { severity: 'info', count: 7 },
+  ],
+  tasksByDay: [
+    { date: '06-09', count: 4 },
+    { date: '06-10', count: 7 },
+    { date: '06-11', count: 5 },
+    { date: '06-12', count: 9 },
+    { date: '06-13', count: 6 },
+    { date: '06-14', count: 3 },
+    { date: '06-15', count: 8 },
+  ],
+}
+
 // ─── Component ──────────────────────────────────────
 const Dashboard = () => {
   const navigate = useNavigate()
@@ -218,11 +367,15 @@ const Dashboard = () => {
   const [progressAnimated, setProgressAnimated] = useState(false)
   const [analyzingProgress, setAnalyzingProgress] = useState<Record<string, number>>({})
 
-  // Fetch real data from API
+  // Fetch real data from API, fallback to mock data
   useEffect(() => {
     fetchStats()
       .then((res) => setStats(res.data))
-      .catch((err) => console.error('Failed to load stats:', err))
+      .catch(() => {
+        // 后端未就绪时使用 mock 数据展示效果
+        console.warn('[Dashboard] API 不可用，使用 mock 数据展示')
+        setStats(MOCK_STATS)
+      })
       .finally(() => setIsLoading(false))
   }, [])
 
@@ -337,7 +490,10 @@ const Dashboard = () => {
               setProgressAnimated(false)
               fetchStats()
                 .then((res) => setStats(res.data))
-                .catch((err) => console.error('Failed to refresh stats:', err))
+                .catch(() => {
+                  console.warn('[Dashboard] API 不可用，使用 mock 数据展示')
+                  setStats(MOCK_STATS)
+                })
                 .finally(() => setIsLoading(false))
             }}
             className="btn-press focus-ring"

@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Modal, Spin, message } from 'antd'
+import { Modal, Spin, message, Table, Tabs, Tag, Progress, Tooltip } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import {
   Download,
   ShieldCheck,
@@ -21,14 +22,28 @@ import {
   Copy,
   Check,
   Filter,
+  Globe,
+  Hash,
+  Link2,
+  MapPin,
+  Skull,
+  Eye,
+  ShieldAlert,
+  Terminal,
+  Activity,
+  Search,
+  FileCode,
 } from 'lucide-react'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { marked } from 'marked'
 import {
   RiskRadarChart,
   VulnTypeDonutChart,
   SeverityBarChart,
 } from '../components/secagent/VisualizationCharts'
 import ATTACKHeatmap, { type ATTCKTechnique } from '../components/secagent/ATTACKHeatmap'
-import { getTask, sendMessage, downloadPdfReport, type TaskResponse } from '../services/api'
+import { getTask, sendMessage, downloadPdfReport, downloadMdReport, type TaskResponse } from '../services/api'
 
 // ─── CWE Database ─────────────────────────────────────
 interface CWEInfo {
@@ -248,12 +263,12 @@ function InfoIcon({ size = 24 }: { size?: number }) {
   )
 }
 
-function RiskLevelBadge({ level }: { level: string }) {
-  const config: Record<string, { label: string; color: string; bg: string; icon: React.ComponentType<{ size?: number }> }> = {
-    high: { label: '高危', color: '#EF4444', bg: 'rgba(239,68,68,0.08)', icon: AlertTriangle },
-    medium: { label: '中危', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', icon: Zap },
-    low: { label: '低危', color: '#10B981', bg: 'rgba(16,185,129,0.08)', icon: ShieldCheck },
-    info: { label: '信息', color: '#94A3B8', bg: 'rgba(148,163,184,0.08)', icon: InfoIcon },
+function RiskLevelBadge({ level, large }: { level: string; large?: boolean }) {
+  const config: Record<string, { label: string; color: string; bg: string; borderColor: string; icon: React.ComponentType<{ size?: number }> }> = {
+    high: { label: '高危', color: '#EF4444', bg: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)', icon: AlertTriangle },
+    medium: { label: '中危', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.3)', icon: Zap },
+    low: { label: '低危', color: '#10B981', bg: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.3)', icon: ShieldCheck },
+    info: { label: '信息', color: '#94A3B8', bg: 'rgba(148,163,184,0.12)', borderColor: 'rgba(148,163,184,0.3)', icon: InfoIcon },
   }
   const c = config[level] || config.info
   const Icon = c.icon
@@ -262,16 +277,18 @@ function RiskLevelBadge({ level }: { level: string }) {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '8px',
-        borderRadius: '12px',
-        padding: '8px 16px',
-        fontSize: '14px',
-        fontWeight: 600,
+        gap: large ? '10px' : '8px',
+        borderRadius: large ? '16px' : '12px',
+        padding: large ? '10px 20px' : '8px 16px',
+        fontSize: large ? '16px' : '14px',
+        fontWeight: 700,
         background: c.bg,
         color: c.color,
+        border: `1px solid ${c.borderColor}`,
+        boxShadow: large ? `0 0 12px ${c.bg}` : 'none',
       }}
     >
-      <Icon size={16} />
+      <Icon size={large ? 20 : 16} />
       {c.label}
     </span>
   )
@@ -510,6 +527,46 @@ interface ParsedAttackTechnique {
   tactic: string
 }
 
+// ─── Malware Analysis Types (5.1-4) ────────────────
+interface ParsedVerdict {
+  maliciousness: string // 'malicious' | 'suspicious' | 'safe'
+  confidence: string    // 'high' | 'medium' | 'low'
+  reason: string
+}
+
+interface ParsedBehavior {
+  id: number
+  description: string
+  severity: string
+  evidence: string
+  attack_technique: string
+  attack_tactic: string
+}
+
+interface ParsedIOC {
+  type: string
+  value: string
+  context: string
+  threat_intel_result: string
+  threat_intel_detail: string
+}
+
+interface ParsedYaraMatch {
+  rule_name: string
+  description: string
+}
+
+interface ParsedMalwareResult {
+  analysis_type: string
+  verdict: ParsedVerdict
+  behaviors: ParsedBehavior[]
+  iocs: ParsedIOC[]
+  attack_matrix: Array<{ technique_id: string; technique_name: string; tactic: string }>
+  yara_matches: ParsedYaraMatch[]
+  overall_assessment: string
+  recommendations: string[]
+}
+
 interface ParsedResult {
   THOUGHT?: string
   VULNERABILITIES?: ParsedVulnerability[]
@@ -517,6 +574,15 @@ interface ParsedResult {
   ATTACK_TECHNIQUES?: ParsedAttackTechnique[]
   SUMMARY?: string
   rawAnalysis?: string
+  // Malware analysis fields
+  analysis_type?: string
+  verdict?: ParsedVerdict
+  behaviors?: ParsedBehavior[]
+  iocs?: ParsedIOC[]
+  attack_matrix?: Array<{ technique_id: string; technique_name: string; tactic: string }>
+  yara_matches?: ParsedYaraMatch[]
+  overall_assessment?: string
+  recommendations?: string[]
 }
 
 interface ChatMessage {
@@ -524,6 +590,30 @@ interface ChatMessage {
   role: 'user' | 'agent'
   content: string
   time: string
+}
+
+// ─── Vulnerability Table Row Type ───────────────────
+interface VulnerabilityRow {
+  key: string
+  index: number
+  title: string
+  severity: string
+  cwe: string
+  location: string
+  description: string
+  codeSnippet: string
+  fixSuggestion: string
+}
+
+// ─── IOC Table Row Type ─────────────────────────────
+interface IOCRow {
+  key: string
+  index: number
+  type: string
+  value: string
+  context: string
+  threatIntelResult: string
+  threatIntelDetail: string
 }
 
 // ─── Task type display labels ────────────────────────
@@ -541,6 +631,70 @@ const severityFilterOptions = [
   { key: 'low', label: '低危' },
   { key: 'info', label: '信息' },
 ] as const
+
+// ─── Detect code language from snippet ──────────────
+function detectLanguage(code: string): string {
+  if (!code) return 'text'
+  const trimmed = code.trim()
+  // Python patterns
+  if (/^\s*(def |class |import |from |if __name__|print\(|self\.)/m.test(trimmed)) return 'python'
+  // Java patterns
+  if (/^\s*(public\s+class|private\s+|protected\s+|System\.out|import\s+java\.)/m.test(trimmed)) return 'java'
+  // JavaScript/TypeScript patterns
+  if (/^\s*(const\s|let\s|var\s|function\s|=>|require\(|module\.exports)/m.test(trimmed)) return 'javascript'
+  // C/C++ patterns
+  if (/^\s*#\s*include|int\s+main|printf\s*\(/m.test(trimmed)) return 'cpp'
+  // Go patterns
+  if (/^\s*(package\s+|func\s+|fmt\.|go\s)/m.test(trimmed)) return 'go'
+  // Rust patterns
+  if (/^\s*(fn\s+|let\s+mut|pub\s+fn|impl\s+)/m.test(trimmed)) return 'rust'
+  // PHP patterns
+  if (/^\s*<\?php|\$\w+/m.test(trimmed)) return 'php'
+  // SQL patterns
+  if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\s/im.test(trimmed)) return 'sql'
+  // Shell/Bash patterns
+  if (/^\s*(#!\/bin\/|echo\s|export\s|chmod\s)/m.test(trimmed)) return 'bash'
+  return 'text'
+}
+
+// ─── IOC type icon helper ───────────────────────────
+function IOCTypeIcon({ type }: { type: string }) {
+  const t = (type || '').toLowerCase()
+  if (t.includes('ip') || t.includes('ipv4') || t.includes('ipv6')) {
+    return <Globe size={14} style={{ color: 'var(--accent-start)' }} />
+  }
+  if (t.includes('domain') || t.includes('dns')) {
+    return <Link2 size={14} style={{ color: '#10B981' }} />
+  }
+  if (t.includes('url') || t.includes('uri')) {
+    return <ExternalLink size={14} style={{ color: '#F59E0B' }} />
+  }
+  if (t.includes('hash') || t.includes('md5') || t.includes('sha') || t.includes('crc')) {
+    return <Hash size={14} style={{ color: '#8B5CF6' }} />
+  }
+  if (t.includes('email') || t.includes('mail')) {
+    return <MessageSquare size={14} style={{ color: '#EC4899' }} />
+  }
+  if (t.includes('file') || t.includes('path')) {
+    return <FileCode size={14} style={{ color: '#06B6D4' }} />
+  }
+  return <Search size={14} style={{ color: 'var(--text-muted)' }} />
+}
+
+// ─── Tactic name mapping ────────────────────────────
+const tacticNameMap: Record<string, string> = {
+  initial_access: '初始访问',
+  execution: '执行',
+  persistence: '持久化',
+  privilege_escalation: '权限提升',
+  defense_evasion: '防御规避',
+  credential_access: '凭证访问',
+  discovery: '发现',
+  lateral_movement: '横向移动',
+  collection: '收集',
+  exfiltration: '数据渗出',
+  command_and_control: '命令控制',
+}
 
 // ─── Main Component ─────────────────────────────────
 const Report = () => {
@@ -565,6 +719,14 @@ const Report = () => {
   const [codeCopied, setCodeCopied] = useState(false)
   const [severityFilter, setSeverityFilter] = useState<string>('all')
 
+  // ─── 5.1-7: Markdown preview state ───────────────
+  const [markdownContent, setMarkdownContent] = useState<string>('')
+  const [markdownLoading, setMarkdownLoading] = useState(false)
+
+  // ─── 5.1-8: PDF download progress state ─────────
+  const [pdfDownloading, setPdfDownloading] = useState(false)
+  const [pdfProgress, setPdfProgress] = useState(0)
+
   // ─── Fetch task data on mount ────────────────────
   useEffect(() => {
     if (!taskId) {
@@ -581,8 +743,6 @@ const Report = () => {
         setTask(fetchedTask)
 
         // Initialize chat messages from existing conversations if available
-        // Note: TaskResponse does not have conversations field in current api.ts,
-        // but we keep this for future compatibility
         if ((fetchedTask as any).conversations && (fetchedTask as any).conversations.length > 0) {
           setMessages(
             (fetchedTask as any).conversations.map((c: any) => ({
@@ -615,6 +775,14 @@ const Report = () => {
     }
   }, [task?.result_json])
 
+  // ─── Is malware analysis? ────────────────────────
+  const isMalwareAnalysis = useMemo(() => {
+    if (task?.type === 'malware_analysis') return true
+    if (resultData?.analysis_type === 'malware_analysis') return true
+    if (resultData?.verdict) return true
+    return false
+  }, [task?.type, resultData])
+
   // ─── Derived display data ────────────────────────
   const vulnerabilities = useMemo(() => {
     if (!resultData?.VULNERABILITIES) return []
@@ -642,21 +810,84 @@ const Report = () => {
     return resultData.ATTACK_TECHNIQUES
   }, [resultData])
 
+  // ─── 5.1-4: Malware analysis parsed data ─────────
+  const malwareResult = useMemo<ParsedMalwareResult | null>(() => {
+    if (!resultData) return null
+    if (!resultData.verdict && !resultData.analysis_type && !isMalwareAnalysis) return null
+    return {
+      analysis_type: resultData.analysis_type || 'malware_analysis',
+      verdict: resultData.verdict || { maliciousness: 'safe', confidence: 'low', reason: '' },
+      behaviors: resultData.behaviors || [],
+      iocs: resultData.iocs || [],
+      attack_matrix: resultData.attack_matrix || [],
+      yara_matches: resultData.yara_matches || [],
+      overall_assessment: resultData.overall_assessment || '',
+      recommendations: resultData.recommendations || [],
+    }
+  }, [resultData, isMalwareAnalysis])
+
+  // ─── 5.1-5: IOC data ─────────────────────────────
+  const iocData = useMemo<IOCRow[]>(() => {
+    const iocs = malwareResult?.iocs || (resultData as any)?.iocs || []
+    return iocs.map((ioc: ParsedIOC, idx: number) => ({
+      key: `ioc-${idx}`,
+      index: idx + 1,
+      type: ioc.type || '未知',
+      value: ioc.value || '--',
+      context: ioc.context || '--',
+      threatIntelResult: ioc.threat_intel_result || 'unknown',
+      threatIntelDetail: ioc.threat_intel_detail || '',
+    }))
+  }, [malwareResult, resultData])
+
   // Map ParsedAttackTechnique[] to ATTCKTechnique[] for heatmap
   const heatmapTechniques = useMemo<ATTCKTechnique[]>(() => {
-    if (!attckTechniques.length) return []
-    return attckTechniques.map((tech) => ({
-      id: tech.id,
-      name: tech.name,
-      tactic: tech.tactic,
-      confidence: 70,
-    }))
-  }, [attckTechniques])
+    const techs: ATTCKTechnique[] = []
+    // From ATTACK_TECHNIQUES
+    for (const tech of attckTechniques) {
+      techs.push({
+        id: tech.id,
+        name: tech.name,
+        tactic: tech.tactic,
+        confidence: 70,
+      })
+    }
+    // From malware attack_matrix
+    if (malwareResult?.attack_matrix) {
+      for (const tech of malwareResult.attack_matrix) {
+        if (!techs.find(t => t.id === tech.technique_id)) {
+          techs.push({
+            id: tech.technique_id,
+            name: tech.technique_name,
+            tactic: tech.tactic,
+            confidence: 70,
+          })
+        }
+      }
+    }
+    return techs
+  }, [attckTechniques, malwareResult])
+
+  // ─── 5.1-6: All ATT&CK techniques for Tag display ──
+  const allAttackTechniques = useMemo(() => {
+    const techs: Array<{ id: string; name: string; tactic: string }> = []
+    for (const tech of attckTechniques) {
+      techs.push({ id: tech.id, name: tech.name, tactic: tech.tactic })
+    }
+    if (malwareResult?.attack_matrix) {
+      for (const tech of malwareResult.attack_matrix) {
+        if (!techs.find(t => t.id === tech.technique_id)) {
+          techs.push({ id: tech.technique_id, name: tech.technique_name, tactic: tech.tactic })
+        }
+      }
+    }
+    return techs
+  }, [attckTechniques, malwareResult])
 
   const summary = useMemo(() => {
     if (!resultData) return null
-    return resultData.SUMMARY || resultData.rawAnalysis || null
-  }, [resultData])
+    return resultData.SUMMARY || resultData.rawAnalysis || malwareResult?.overall_assessment || null
+  }, [resultData, malwareResult])
 
   const riskLevel = (task as any)?.severity || 'info'
   const analyzedAt = task?.updated_at
@@ -673,11 +904,47 @@ const Report = () => {
   const vulnCount = (task as any)?.vulnCount ?? vulnerabilities.length
   const typeLabel = taskTypeLabels[task?.type || ''] || task?.type || '未知类型'
 
+  // ─── 5.1-1: Target file/code name ────────────────
+  const targetName = useMemo(() => {
+    if (task?.input_path) {
+      // Extract filename from path
+      const parts = task.input_path.replace(/\\/g, '/').split('/')
+      return parts[parts.length - 1] || task.input_path
+    }
+    if (task?.input_content) {
+      // Truncate input_content for display
+      const content = task.input_content.trim()
+      if (content.length > 60) {
+        return content.substring(0, 60) + '...'
+      }
+      return content
+    }
+    return '--'
+  }, [task])
+
   // ─── Filtered vulnerabilities ────────────────────
   const filteredVulnerabilities = useMemo(() => {
     if (severityFilter === 'all') return vulnerabilities
     return vulnerabilities.filter((v) => (v.severity || 'info') === severityFilter)
   }, [vulnerabilities, severityFilter])
+
+  // ─── Vulnerability table rows ────────────────────
+  const vulnTableRows = useMemo<VulnerabilityRow[]>(() => {
+    return filteredVulnerabilities.map((vuln, idx) => {
+      const originalIdx = vulnerabilities.indexOf(vuln)
+      return {
+        key: `VULN-${String(originalIdx + 1).padStart(3, '0')}`,
+        index: originalIdx + 1,
+        title: vuln.title,
+        severity: vuln.severity || 'info',
+        cwe: vuln.cwe || '',
+        location: vuln.location || '--',
+        description: vuln.description,
+        codeSnippet: vuln.codeSnippet || '',
+        fixSuggestion: vuln.fixSuggestion || '',
+      }
+    })
+  }, [filteredVulnerabilities, vulnerabilities])
 
   // ─── Severity counts ─────────────────────────────
   const severityCounts = useMemo(() => {
@@ -691,15 +958,16 @@ const Report = () => {
 
   // ─── Toggle all vulns ────────────────────────────
   const allExpanded = filteredVulnerabilities.length > 0 &&
-    filteredVulnerabilities.every((_, idx) => expandedVulns.has(`VULN-${String(idx + 1).padStart(3, '0')}`))
+    filteredVulnerabilities.every((_, idx) => expandedVulns.has(`VULN-${String(vulnerabilities.indexOf(filteredVulnerabilities[idx]) + 1).padStart(3, '0')}`))
 
   const toggleAllVulns = () => {
     if (allExpanded) {
       setExpandedVulns(new Set())
     } else {
       const newSet = new Set<string>()
-      filteredVulnerabilities.forEach((_, idx) => {
-        newSet.add(`VULN-${String(idx + 1).padStart(3, '0')}`)
+      filteredVulnerabilities.forEach((vuln) => {
+        const originalIdx = vulnerabilities.indexOf(vuln)
+        newSet.add(`VULN-${String(originalIdx + 1).padStart(3, '0')}`)
       })
       setExpandedVulns(newSet)
     }
@@ -725,14 +993,29 @@ const Report = () => {
     setCweModalOpen(true)
   }
 
-  // ─── Export handler ──────────────────────────────
+  // ─── 5.1-8: Export handler with progress ─────────
   const handleExport = () => {
     if (!taskId) {
       message.error('导出失败：未选择分析任务')
       return
     }
-    message.success('正在生成报告，报告将开始下载')
+    setPdfDownloading(true)
+    setPdfProgress(0)
+
+    // Simulate progress before actual download
+    const progressTimer = setInterval(() => {
+      setPdfProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(progressTimer)
+          return 90
+        }
+        return prev + 10
+      })
+    }, 300)
+
     downloadPdfReport(Number(taskId)).then((res) => {
+      clearInterval(progressTimer)
+      setPdfProgress(100)
       const url = window.URL.createObjectURL(new Blob([res.data]))
       const link = document.createElement('a')
       link.href = url
@@ -741,10 +1024,32 @@ const Report = () => {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
+      message.success('PDF 报告下载完成')
+      setTimeout(() => {
+        setPdfDownloading(false)
+        setPdfProgress(0)
+      }, 1500)
     }).catch(() => {
+      clearInterval(progressTimer)
       message.error('导出失败，请稍后重试')
+      setPdfDownloading(false)
+      setPdfProgress(0)
     })
   }
+
+  // ─── 5.1-7: Load markdown content ────────────────
+  const loadMarkdownContent = useCallback(async () => {
+    if (!taskId || markdownContent) return
+    setMarkdownLoading(true)
+    try {
+      const res = await downloadMdReport(Number(taskId))
+      setMarkdownContent(res.data || '')
+    } catch {
+      message.error('加载 Markdown 报告失败')
+    } finally {
+      setMarkdownLoading(false)
+    }
+  }, [taskId, markdownContent])
 
   // ─── Chat handler ────────────────────────────────
   const handleSendMessage = async () => {
@@ -810,6 +1115,192 @@ const Report = () => {
     low: '低危',
     info: '信息',
   }
+
+  // ─── 5.1-2: Vulnerability Table columns ──────────
+  const vulnColumns: ColumnsType<VulnerabilityRow> = useMemo(() => [
+    {
+      title: '编号',
+      dataIndex: 'index',
+      key: 'index',
+      width: 70,
+      align: 'center' as const,
+      render: (val: number) => (
+        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+          #{String(val).padStart(3, '0')}
+        </span>
+      ),
+    },
+    {
+      title: '漏洞标题',
+      dataIndex: 'title',
+      key: 'title',
+      ellipsis: true,
+      render: (text: string) => (
+        <span style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-primary)' }}>{text}</span>
+      ),
+    },
+    {
+      title: '严重等级',
+      dataIndex: 'severity',
+      key: 'severity',
+      width: 100,
+      align: 'center' as const,
+      render: (sev: string) => {
+        const color = severityColors[sev] || '#94A3B8'
+        const bg = severityBgColors[sev] || 'rgba(148,163,184,0.06)'
+        return (
+          <Tag
+            color={color}
+            style={{
+              margin: 0,
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 600,
+              border: 'none',
+              background: bg,
+            }}
+          >
+            {severityLabels[sev] || '信息'}
+          </Tag>
+        )
+      },
+    },
+    {
+      title: 'CWE',
+      dataIndex: 'cwe',
+      key: 'cwe',
+      width: 120,
+      align: 'center' as const,
+      render: (cwe: string) => {
+        if (!cwe) return <span style={{ color: 'var(--text-muted)' }}>--</span>
+        return (
+          <button
+            onClick={() => handleOpenCweModal(cwe)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: 'var(--accent-start)',
+              background: 'rgba(91,163,255,0.06)',
+              borderRadius: '8px',
+              padding: '2px 8px',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.7' }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+            title="查看 CWE 详情"
+          >
+            {cwe}
+            <ExternalLink size={10} />
+          </button>
+        )
+      },
+    },
+    {
+      title: '位置',
+      dataIndex: 'location',
+      key: 'location',
+      width: 200,
+      ellipsis: true,
+      render: (text: string) => (
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{text}</span>
+      ),
+    },
+  ], [])
+
+  // ─── 5.1-5: IOC Table columns ────────────────────
+  const iocColumns: ColumnsType<IOCRow> = useMemo(() => [
+    {
+      title: '#',
+      dataIndex: 'index',
+      key: 'index',
+      width: 50,
+      align: 'center' as const,
+      render: (val: number) => (
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{val}</span>
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      key: 'type',
+      width: 100,
+      align: 'center' as const,
+      render: (type: string) => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)' }}>
+          <IOCTypeIcon type={type} />
+          {type}
+        </span>
+      ),
+    },
+    {
+      title: 'IOC 值',
+      dataIndex: 'value',
+      key: 'value',
+      ellipsis: true,
+      render: (val: string) => (
+        <code style={{
+          fontSize: '12px',
+          fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+          color: 'var(--accent-start)',
+          background: 'rgba(91,163,255,0.06)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+        }}>
+          {val}
+        </code>
+      ),
+    },
+    {
+      title: '上下文',
+      dataIndex: 'context',
+      key: 'context',
+      width: 200,
+      ellipsis: true,
+      render: (text: string) => (
+        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{text}</span>
+      ),
+    },
+    {
+      title: '威胁情报',
+      dataIndex: 'threatIntelResult',
+      key: 'threatIntelResult',
+      width: 120,
+      align: 'center' as const,
+      render: (result: string, record: IOCRow) => {
+        const r = (result || 'unknown').toLowerCase()
+        if (r.includes('malicious') || r.includes('known') || r.includes('恶意') || r === 'malicious') {
+          return (
+            <Tooltip title={record.threatIntelDetail || '已知恶意指标'}>
+              <Tag color="#EF4444" style={{ margin: 0, borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: 'none' }}>
+                已知恶意
+              </Tag>
+            </Tooltip>
+          )
+        }
+        if (r.includes('suspicious') || r.includes('可疑')) {
+          return (
+            <Tooltip title={record.threatIntelDetail || '可疑指标'}>
+              <Tag color="#F59E0B" style={{ margin: 0, borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: 'none' }}>
+                可疑
+              </Tag>
+            </Tooltip>
+          )
+        }
+        return (
+          <Tooltip title={record.threatIntelDetail || '未在威胁情报库中找到'}>
+            <Tag color="#94A3B8" style={{ margin: 0, borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: 'none' }}>
+              未知
+            </Tag>
+          </Tooltip>
+        )
+      },
+    },
+  ], [])
 
   // ─── Loading state ───────────────────────────────
   if (isLoading) {
@@ -1120,66 +1611,26 @@ const Report = () => {
     )
   }
 
-  // ─── Main Report Content ─────────────────────────
-  return (
-    <div style={{ margin: '0 auto', width: '100%', maxWidth: '1200px', padding: '24px 16px' }}>
-      {/* Report Header */}
-      <div className="animate-slide-up" style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' as const, gap: '16px' }}>
-          <div>
-            <h1
-              style={{ fontWeight: 600, fontSize: '28px', lineHeight: 1.3, color: 'var(--text-primary)' }}
-            >
-              分析报告
-            </h1>
-            <p
-              style={{ marginTop: '4px', fontSize: '14px', color: 'var(--text-secondary)' }}
-            >
-              任务 {taskId} · {task?.input_path || '--'} · {typeLabel}
-            </p>
-          </div>
-          <button
-            onClick={handleExport}
-            style={{
-              background: 'var(--accent-gradient)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              borderRadius: '12px',
-              padding: '10px 20px',
-              fontSize: '14px',
-              fontWeight: 500,
-              color: 'white',
-              border: 'none',
-              cursor: 'pointer',
-              boxShadow: 'var(--shadow-brand)',
-              transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9' }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
-          >
-            <Download size={16} />
-            导出 PDF 报告
-          </button>
-        </div>
-      </div>
-
-      {/* Report Info Bar */}
+  // ─── Structured View Content ─────────────────────
+  const structuredViewContent = (
+    <>
+      {/* ─── 5.1-1: Report Info Bar (Enhanced) ──────── */}
       <div
         className="animate-slide-up"
         style={{
           marginBottom: '24px',
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: 'repeat(5, 1fr)',
           gap: '16px',
           animationDelay: '60ms',
           animationFillMode: 'both',
         }}
       >
         {[
+          { label: '目标文件', value: targetName, icon: FileCode },
           { label: '分析时间', value: analyzedAt, icon: Clock },
           { label: '分析耗时', value: duration, icon: Zap },
-          { label: '风险等级', value: <RiskLevelBadge level={riskLevel} />, icon: Shield },
+          { label: '风险等级', value: <RiskLevelBadge level={riskLevel} large />, icon: Shield },
           { label: '漏洞数量', value: String(vulnCount), icon: Bug },
         ].map((item) => {
           const Icon = item.icon
@@ -1199,7 +1650,17 @@ const Report = () => {
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{item.label}</span>
               </div>
               {typeof item.value === 'string' ? (
-                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <div
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={typeof item.value === 'string' ? item.value : undefined}
+                >
                   {item.value}
                 </div>
               ) : (
@@ -1274,10 +1735,293 @@ const Report = () => {
         </div>
       )}
 
-      {/* Vulnerabilities List */}
+      {/* ─── 5.1-4: Malware Analysis Result ──────────── */}
+      {isMalwareAnalysis && malwareResult && (
+        <div
+          className="animate-slide-up"
+          style={{
+            marginBottom: '24px',
+            borderRadius: '16px',
+            border: '1px solid var(--border-light)',
+            background: 'var(--bg-card)',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-sm)',
+            animationDelay: '150ms',
+            animationFillMode: 'both',
+          }}
+        >
+          {/* Verdict Header */}
+          <div
+            style={{
+              padding: '24px',
+              borderBottom: '1px solid var(--border-light)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap' as const,
+              gap: '16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <h2 style={{ fontWeight: 600, fontSize: '18px', color: 'var(--text-primary)' }}>
+                恶意分析结果
+              </h2>
+              {/* Verdict Badge */}
+              {(() => {
+                const v = (malwareResult.verdict?.maliciousness || 'safe').toLowerCase()
+                const verdictConfig: Record<string, { icon: React.ComponentType<{ size?: number }>; label: string; color: string; bg: string; borderColor: string }> = {
+                  malicious: { icon: Skull, label: '恶意', color: '#EF4444', bg: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' },
+                  suspicious: { icon: Eye, label: '可疑', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.3)' },
+                  safe: { icon: ShieldCheck, label: '安全', color: '#10B981', bg: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.3)' },
+                }
+                const cfg = verdictConfig[v] || verdictConfig.safe
+                const Icon = cfg.icon
+                return (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      borderRadius: '16px',
+                      padding: '10px 24px',
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      background: cfg.bg,
+                      color: cfg.color,
+                      border: `2px solid ${cfg.borderColor}`,
+                      boxShadow: `0 0 20px ${cfg.bg}`,
+                    }}
+                  >
+                    <Icon size={24} />
+                    {cfg.label}
+                  </span>
+                )
+              })()}
+            </div>
+            {/* Confidence Progress */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '200px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                置信度
+              </span>
+              <Progress
+                percent={(() => {
+                  const c = (malwareResult.verdict?.confidence || 'low').toLowerCase()
+                  if (c === 'high') return 90
+                  if (c === 'medium') return 60
+                  return 30
+                })()}
+                strokeColor={(() => {
+                  const v = (malwareResult.verdict?.maliciousness || 'safe').toLowerCase()
+                  if (v === 'malicious') return '#EF4444'
+                  if (v === 'suspicious') return '#F59E0B'
+                  return '#10B981'
+                })()}
+                trailColor="rgba(148,163,184,0.1)"
+                size="small"
+                style={{ flex: 1 }}
+              />
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {(() => {
+                  const c = (malwareResult.verdict?.confidence || 'low').toLowerCase()
+                  if (c === 'high') return '高'
+                  if (c === 'medium') return '中'
+                  return '低'
+                })()}
+              </span>
+            </div>
+          </div>
+
+          {/* Verdict Reason */}
+          {malwareResult.verdict?.reason && (
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-light)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                判定理由
+              </div>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--text-primary)', margin: 0 }}>
+                {malwareResult.verdict.reason}
+              </p>
+            </div>
+          )}
+
+          {/* Behaviors List */}
+          {malwareResult.behaviors && malwareResult.behaviors.length > 0 && (
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-light)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                行为描述 ({malwareResult.behaviors.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {malwareResult.behaviors.map((behavior, idx) => {
+                  const bSev = (behavior.severity || 'info').toLowerCase()
+                  const sevColor = severityColors[bSev] || '#94A3B8'
+                  const sevBg = severityBgColors[bSev] || 'rgba(148,163,184,0.06)'
+                  return (
+                    <div
+                      key={behavior.id || idx}
+                      style={{
+                        borderRadius: '12px',
+                        border: '1px solid var(--border-light)',
+                        background: 'var(--bg-page)',
+                        padding: '16px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' as const }}>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                          {behavior.description}
+                        </span>
+                        <Tag
+                          color={sevColor}
+                          style={{ margin: 0, borderRadius: '8px', fontSize: '11px', fontWeight: 600, border: 'none', background: sevBg }}
+                        >
+                          {severityLabels[bSev] || '信息'}
+                        </Tag>
+                        {behavior.attack_technique && (
+                          <Tag
+                            style={{
+                              margin: 0,
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              border: '1px solid rgba(91,163,255,0.2)',
+                              background: 'rgba(91,163,255,0.06)',
+                              color: 'var(--accent-start)',
+                            }}
+                          >
+                            {behavior.attack_technique}
+                          </Tag>
+                        )}
+                      </div>
+                      {behavior.evidence && (
+                        <div style={{ marginBottom: behavior.attack_tactic ? '8px' : '0' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>证据: </span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{behavior.evidence}</span>
+                        </div>
+                      )}
+                      {behavior.attack_tactic && (
+                        <div>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>战术: </span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            {tacticNameMap[behavior.attack_tactic] || behavior.attack_tactic}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* YARA Matches */}
+          {malwareResult.yara_matches && malwareResult.yara_matches.length > 0 && (
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-light)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                YARA 规则匹配 ({malwareResult.yara_matches.length})
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px' }}>
+                {malwareResult.yara_matches.map((match, idx) => (
+                  <Tooltip key={idx} title={match.description || '无描述'}>
+                    <Tag
+                      style={{
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        border: '1px solid rgba(139,92,246,0.2)',
+                        background: 'rgba(139,92,246,0.06)',
+                        color: '#8B5CF6',
+                        cursor: 'default',
+                      }}
+                    >
+                      <Terminal size={10} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                      {match.rule_name}
+                    </Tag>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Overall Assessment */}
+          {malwareResult.overall_assessment && (
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-light)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                综合评估
+              </div>
+              <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--text-primary)', margin: 0 }}>
+                {malwareResult.overall_assessment}
+              </p>
+            </div>
+          )}
+
+          {/* Recommendations */}
+          {malwareResult.recommendations && malwareResult.recommendations.length > 0 && (
+            <div style={{ padding: '16px 24px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: '#10B981', marginBottom: '12px' }}>
+                处置建议
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {malwareResult.recommendations.map((rec, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '8px',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      background: 'rgba(16,185,129,0.04)',
+                      border: '1px solid rgba(16,185,129,0.1)',
+                    }}
+                  >
+                    <ShieldCheck size={14} style={{ color: '#10B981', flexShrink: 0, marginTop: '3px' }} />
+                    <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{rec}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── 5.1-5: IOC Table ────────────────────────── */}
+      {iocData.length > 0 && (
+        <div
+          className="animate-slide-up"
+          style={{
+            marginBottom: '24px',
+            borderRadius: '16px',
+            border: '1px solid var(--border-light)',
+            background: 'var(--bg-card)',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-sm)',
+            animationDelay: '180ms',
+            animationFillMode: 'both',
+          }}
+        >
+          <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-light)' }}>
+            <h2 style={{ fontWeight: 600, fontSize: '18px', color: 'var(--text-primary)' }}>
+              IOC 指标清单 ({iocData.length})
+            </h2>
+            <p style={{ marginTop: '4px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+              恶意行为关联的入侵指标
+            </p>
+          </div>
+          <div style={{ padding: '0 16px 16px' }}>
+            <Table
+              dataSource={iocData}
+              columns={iocColumns}
+              size="small"
+              pagination={iocData.length > 10 ? { pageSize: 10, size: 'small' } : false}
+              style={{ background: 'transparent' }}
+              className="dark-table"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ─── 5.1-2 + 5.1-3: Vulnerabilities Table ───── */}
       <div
         className="animate-slide-up"
-        style={{ marginBottom: '24px', animationDelay: '180ms', animationFillMode: 'both' }}
+        style={{ marginBottom: '24px', animationDelay: '200ms', animationFillMode: 'both' }}
       >
         {vulnerabilities.length > 0 ? (
           <>
@@ -1372,232 +2116,117 @@ const Report = () => {
               </div>
             </div>
 
-            {/* Filtered vulnerability list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {filteredVulnerabilities.length > 0 ? (
-                filteredVulnerabilities.map((vuln, idx) => {
-                  const originalIdx = vulnerabilities.indexOf(vuln)
-                  const vulnId = `VULN-${String(originalIdx + 1).padStart(3, '0')}`
-                  const isExpanded = expandedVulns.has(vulnId)
-                  const sev = vuln.severity || 'info'
+            {/* Vulnerability Table */}
+            <div
+              style={{
+                borderRadius: '16px',
+                border: '1px solid var(--border-light)',
+                background: 'var(--bg-card)',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              <Table
+                dataSource={vulnTableRows}
+                columns={vulnColumns}
+                size="small"
+                pagination={vulnTableRows.length > 20 ? { pageSize: 20, size: 'small' } : false}
+                expandable={{
+                  expandedRowKeys: Array.from(expandedVulns),
+                  onExpandedRowsChange: (keys) => {
+                    setExpandedVulns(new Set(keys as string[]))
+                  },
+                  expandedRowRender: (record) => (
+                    <div style={{ padding: '8px 0' }}>
+                      {/* Description */}
+                      <p style={{ marginBottom: '16px', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
+                        {record.description}
+                      </p>
 
-                  return (
-                    <div
-                      key={vulnId}
-                      className={`vuln-card-severity severity-${sev} stagger-card`}
-                      style={{
-                        overflow: 'hidden',
-                        borderRadius: '16px',
-                        border: '1px solid',
-                        borderColor: isExpanded
-                          ? severityBorderColors[sev]
-                          : 'var(--border-light)',
-                        boxShadow: 'var(--shadow-sm)',
-                        transition: 'all 0.2s',
-                        animationDelay: `${idx * 80}ms`,
-                      }}
-                    >
-                      {/* Vuln Header */}
-                      <button
-                        onClick={() => {
-                          setExpandedVulns((prev) => {
-                            const newSet = new Set(prev)
-                            if (newSet.has(vulnId)) {
-                              newSet.delete(vulnId)
-                            } else {
-                              newSet.add(vulnId)
-                            }
-                            return newSet
-                          })
-                        }}
-                        style={{
-                          display: 'flex',
-                          width: '100%',
-                          alignItems: 'center',
-                          gap: '16px',
-                          padding: '16px 20px',
-                          textAlign: 'left',
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: 'inherit',
-                        }}
-                      >
-                        <SeverityDot severity={sev} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' as const }}>
-                            <span
-                              style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-primary)' }}
-                            >
-                              {vuln.title}
-                            </span>
-                            <span
-                              style={{
-                                borderRadius: '8px',
-                                padding: '2px 8px',
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                background: severityBgColors[sev],
-                                color: severityColors[sev],
-                              }}
-                            >
-                              {severityLabels[sev] || '信息'}
-                            </span>
-                            {vuln.cwe && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleOpenCweModal(vuln.cwe)
-                                }}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  fontSize: '12px',
-                                  fontWeight: 500,
-                                  color: 'var(--accent-start)',
-                                  background: 'rgba(91,163,255,0.06)',
-                                  borderRadius: '8px',
-                                  padding: '2px 8px',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  transition: 'opacity 0.15s',
-                                }}
-                                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.7' }}
-                                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
-                                title="查看 CWE 详情"
-                              >
-                                {vuln.cwe}
-                                <ExternalLink size={10} />
-                              </button>
-                            )}
+                      {/* Code Snippet with Syntax Highlighting */}
+                      {record.codeSnippet && (
+                        <div style={{ marginBottom: '16px' }}>
+                          <div
+                            style={{ marginBottom: '8px', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--text-secondary)' }}
+                          >
+                            问题代码
                           </div>
                           <div
-                            style={{ marginTop: '2px', fontSize: '12px', color: 'var(--text-muted)' }}
+                            style={{
+                              overflow: 'hidden',
+                              borderRadius: '12px',
+                              border: '1px solid rgba(239,68,68,0.1)',
+                            }}
                           >
-                            {vuln.location || '--'}
+                            <SyntaxHighlighter
+                              language={detectLanguage(record.codeSnippet)}
+                              style={oneDark}
+                              customStyle={{
+                                margin: 0,
+                                padding: '16px',
+                                fontSize: '12px',
+                                lineHeight: 1.6,
+                                background: 'rgba(239,68,68,0.02)',
+                              }}
+                            >
+                              {record.codeSnippet}
+                            </SyntaxHighlighter>
                           </div>
                         </div>
-                        {isExpanded ? (
-                          <ChevronUp size={16} style={{ color: 'var(--text-muted)' }} />
-                        ) : (
-                          <ChevronDown size={16} style={{ color: 'var(--text-muted)' }} />
-                        )}
-                      </button>
+                      )}
 
-                      {/* Vuln Detail */}
-                      {isExpanded && (
-                        <div
-                          className="expandable-content"
-                          style={{
-                            borderTop: '1px solid var(--border-light)',
-                            padding: '16px 20px 20px',
-                          }}
-                        >
-                          <p
-                            style={{ marginBottom: '16px', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-primary)' }}
+                      {/* Fix Suggestion with Green Background */}
+                      {record.fixSuggestion && (
+                        <div>
+                          <div
+                            style={{ marginBottom: '8px', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: '#10B981' }}
                           >
-                            {vuln.description}
-                          </p>
-
-                          {/* Code Snippet */}
-                          {vuln.codeSnippet && (
-                            <div style={{ marginBottom: '16px' }}>
-                              <div
-                                style={{ marginBottom: '8px', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--text-secondary)' }}
-                              >
-                                问题代码
-                              </div>
-                              <div
-                                style={{
-                                  overflow: 'hidden',
-                                  borderRadius: '12px',
-                                  border: '1px solid rgba(239,68,68,0.1)',
-                                  background: 'rgba(239,68,68,0.02)',
-                                }}
-                              >
-                                <pre
-                                  className="custom-scrollbar"
-                                  style={{
-                                    overflowX: 'auto',
-                                    padding: '16px',
-                                    fontSize: '12px',
-                                    lineHeight: 1.6,
-                                    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-                                    color: 'var(--text-primary)',
-                                    margin: 0,
-                                  }}
-                                >
-                                  {vuln.codeSnippet}
-                                </pre>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Fix Suggestion */}
-                          {vuln.fixSuggestion && (
-                            <div>
-                              <div
-                                style={{ marginBottom: '8px', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: '#10B981' }}
-                              >
-                                修复建议
-                              </div>
-                              <div
-                                style={{
-                                  overflow: 'hidden',
-                                  borderRadius: '12px',
-                                  border: '1px solid rgba(16,185,129,0.1)',
-                                  background: 'rgba(16,185,129,0.02)',
-                                }}
-                              >
-                                <pre
-                                  className="custom-scrollbar"
-                                  style={{
-                                    overflowX: 'auto',
-                                    padding: '16px',
-                                    fontSize: '12px',
-                                    lineHeight: 1.6,
-                                    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-                                    color: 'var(--text-primary)',
-                                    margin: 0,
-                                  }}
-                                >
-                                  {vuln.fixSuggestion}
-                                </pre>
-                              </div>
-                            </div>
-                          )}
+                            修复建议
+                          </div>
+                          <div
+                            style={{
+                              overflow: 'hidden',
+                              borderRadius: '12px',
+                              border: '1px solid rgba(16,185,129,0.15)',
+                              background: 'rgba(16,185,129,0.04)',
+                            }}
+                          >
+                            <SyntaxHighlighter
+                              language={detectLanguage(record.fixSuggestion)}
+                              style={oneDark}
+                              customStyle={{
+                                margin: 0,
+                                padding: '16px',
+                                fontSize: '12px',
+                                lineHeight: 1.6,
+                                background: 'transparent',
+                              }}
+                            >
+                              {record.fixSuggestion}
+                            </SyntaxHighlighter>
+                          </div>
                         </div>
                       )}
                     </div>
-                  )
-                })
-              ) : (
-                <div
-                  style={{
-                    borderRadius: '16px',
-                    border: '1px solid var(--border-light)',
-                    background: 'var(--bg-card)',
-                    padding: '24px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: 'var(--shadow-sm)',
-                  }}
-                >
-                  <Filter size={32} style={{ color: 'var(--text-muted)', marginBottom: '8px' }} />
-                  <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    当前筛选条件下无漏洞
-                  </p>
-                  <button
-                    onClick={() => setSeverityFilter('all')}
-                    style={{ marginTop: '8px', fontSize: '12px', fontWeight: 500, color: 'var(--accent-start)', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    查看全部漏洞
-                  </button>
-                </div>
-              )}
+                  ),
+                }}
+                style={{ background: 'transparent' }}
+                className="dark-table"
+                locale={{ emptyText: (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px' }}>
+                    <Filter size={32} style={{ color: 'var(--text-muted)', marginBottom: '8px' }} />
+                    <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                      当前筛选条件下无漏洞
+                    </p>
+                    <button
+                      onClick={() => setSeverityFilter('all')}
+                      style={{ marginTop: '8px', fontSize: '12px', fontWeight: 500, color: 'var(--accent-start)', background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      查看全部漏洞
+                    </button>
+                  </div>
+                )}}
+              />
             </div>
           </>
         ) : (
@@ -1693,10 +2322,66 @@ const Report = () => {
         </div>
       )}
 
-      {/* ATT&CK Heatmap */}
+      {/* ─── 5.1-6: ATT&CK Heatmap + Tag List ───────── */}
       <div className="animate-slide-up" style={{ marginBottom: '24px', animationDelay: '300ms', animationFillMode: 'both' }}>
         {heatmapTechniques.length > 0 ? (
-          <ATTACKHeatmap techniques={heatmapTechniques} />
+          <>
+            <ATTACKHeatmap techniques={heatmapTechniques} />
+
+            {/* ATT&CK Tag List */}
+            {allAttackTechniques.length > 0 && (
+              <div
+                style={{
+                  marginTop: '16px',
+                  borderRadius: '16px',
+                  border: '1px solid var(--border-light)',
+                  background: 'var(--bg-card)',
+                  padding: '20px 24px',
+                  boxShadow: 'var(--shadow-sm)',
+                }}
+              >
+                <h3 style={{ marginBottom: '12px', fontWeight: 600, fontSize: '16px', color: 'var(--text-primary)' }}>
+                  ATT&CK 技术映射
+                </h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '10px' }}>
+                  {allAttackTechniques.map((tech, idx) => {
+                    const tacticCn = tacticNameMap[tech.tactic] || tech.tactic
+                    return (
+                      <Tooltip
+                        key={`${tech.id}-${idx}`}
+                        title={`战术: ${tacticCn}`}
+                      >
+                        <Tag
+                          style={{
+                            margin: 0,
+                            borderRadius: '10px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            border: '1px solid rgba(91,163,255,0.2)',
+                            background: 'rgba(91,163,255,0.06)',
+                            color: 'var(--accent-start)',
+                            cursor: 'default',
+                            display: 'inline-flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: '2px',
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>
+                            {tech.id} - {tech.name}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                            {tacticCn}
+                          </span>
+                        </Tag>
+                      </Tooltip>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div
             style={{
@@ -1985,6 +2670,145 @@ const Report = () => {
           </div>
         </div>
       </div>
+    </>
+  )
+
+  // ─── Main Report Content ─────────────────────────
+  return (
+    <div style={{ margin: '0 auto', width: '100%', maxWidth: '1200px', padding: '24px 16px' }}>
+      {/* Report Header */}
+      <div className="animate-slide-up" style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' as const, gap: '16px' }}>
+          <div>
+            <h1
+              style={{ fontWeight: 600, fontSize: '28px', lineHeight: 1.3, color: 'var(--text-primary)' }}
+            >
+              分析报告
+            </h1>
+            <p
+              style={{ marginTop: '4px', fontSize: '14px', color: 'var(--text-secondary)' }}
+            >
+              任务 {taskId} · {task?.input_path || '--'} · {typeLabel}
+            </p>
+          </div>
+          {/* ─── 5.1-8: PDF Export with Progress ──────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+            <button
+              onClick={handleExport}
+              disabled={pdfDownloading}
+              style={{
+                background: pdfDownloading ? 'rgba(91,163,255,0.6)' : 'var(--accent-gradient)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                padding: '10px 20px',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'white',
+                border: 'none',
+                cursor: pdfDownloading ? 'not-allowed' : 'pointer',
+                boxShadow: 'var(--shadow-brand)',
+                transition: 'opacity 0.15s',
+                opacity: pdfDownloading ? 0.8 : 1,
+              }}
+              onMouseEnter={(e) => { if (!pdfDownloading) e.currentTarget.style.opacity = '0.9' }}
+              onMouseLeave={(e) => { if (!pdfDownloading) e.currentTarget.style.opacity = '1' }}
+            >
+              {pdfDownloading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  正在生成...
+                </>
+              ) : (
+                <>
+                  <Download size={16} />
+                  导出 PDF 报告
+                </>
+              )}
+            </button>
+            {/* Download Progress */}
+            {pdfDownloading && (
+              <div style={{ width: '180px' }}>
+                <Progress
+                  percent={pdfProgress}
+                  size="small"
+                  strokeColor={{ '0%': 'var(--accent-start)', '100%': 'var(--accent-end)' }}
+                  trailColor="rgba(148,163,184,0.1)"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── 5.1-7: Tabs - Structured View + Markdown Preview ── */}
+      <Tabs
+        defaultActiveKey="structured"
+        type="card"
+        onChange={(key) => {
+          if (key === 'markdown') {
+            loadMarkdownContent()
+          }
+        }}
+        items={[
+          {
+            key: 'structured',
+            label: (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <FileText size={14} />
+                结构化视图
+              </span>
+            ),
+            children: structuredViewContent,
+          },
+          {
+            key: 'markdown',
+            label: (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <FileCode size={14} />
+                Markdown 预览
+              </span>
+            ),
+            children: (
+              <div
+                style={{
+                  borderRadius: '16px',
+                  border: '1px solid var(--border-light)',
+                  background: 'var(--bg-card)',
+                  padding: '24px',
+                  boxShadow: 'var(--shadow-sm)',
+                  minHeight: '400px',
+                }}
+              >
+                {markdownLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px' }}>
+                    <Spin size="large" />
+                    <span style={{ marginLeft: '12px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                      正在加载 Markdown 报告...
+                    </span>
+                  </div>
+                ) : markdownContent ? (
+                  <div
+                    className="markdown-body dark-markdown"
+                    dangerouslySetInnerHTML={{
+                      __html: marked(markdownContent, { async: false }) as string,
+                    }}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px' }}>
+                    <FileCode size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                      暂无 Markdown 报告内容
+                    </p>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+        ]}
+        style={{ marginBottom: '0' }}
+      />
 
       {/* CWE Detail Modal */}
       <CWEDetailModal
