@@ -121,6 +121,9 @@ class AgentEngine:
         # 工具执行器：{ tool_name: callable(**params) -> dict }
         self._tool_executors: dict[str, Callable] = {}
 
+        # 自动注册已实现的工具（替换 _stub_executor 占位）
+        self._auto_register_tools()
+
         # 循环控制状态
         self._recent_actions: list[str] = []          # 最近动作指纹，用于重复检测
         self._no_progress_count: int = 0               # 连续无进展步数
@@ -1002,7 +1005,13 @@ class AgentEngine:
         # 记录 Action 步骤（包含工具执行结果摘要）
         action_summary = []
         for r in results:
-            entry: dict = {"name": r["name"], "ok": r["error"] is None, "args": r.get("arguments", {})}
+            # 对 args 中的长值进行截断，避免 code 等字段导致 JSON 过大
+            raw_args = r.get("arguments", {})
+            truncated_args = {
+                k: (str(v)[:200] + "...(已截断)" if len(str(v)) > 200 else v)
+                for k, v in raw_args.items()
+            }
+            entry: dict = {"name": r["name"], "ok": r["error"] is None, "args": truncated_args}
             # 包含工具执行结果摘要，让前端能看到关键信息
             if r["error"] is None and r.get("result"):
                 result = r["result"]
@@ -1036,6 +1045,37 @@ class AgentEngine:
         })
 
         return results
+
+    def _auto_register_tools(self) -> None:
+        """自动注册已实现的工具，替换占位 stub executor。
+
+        逐个尝试导入工具模块，单个失败不影响其他工具注册。
+        注册后 _do_action 将调用真实实现而非 _stub_executor。
+        """
+        tool_imports = [
+            ("scan_code", "app.tools.scanner", "scan_code"),
+            ("query_cve", "app.tools.cve_query", "query_cve"),
+            ("query_cwe", "app.tools.cve_query", "query_cwe"),
+            ("query_threat_intel", "app.tools.threat_intel", "query_threat_intel"),
+            ("extract_iocs", "app.tools.ioc_extractor", "extract_iocs"),
+            ("map_attack", "app.tools.attack_mapper", "map_attack"),
+            ("scan_yara", "app.tools.yara_scanner", "scan_yara"),
+            ("extract_file_features", "app.tools.file_analysis", "extract_file_features"),
+        ]
+
+        registered = 0
+        import importlib
+        for tool_name, module_path, func_name in tool_imports:
+            try:
+                mod = importlib.import_module(module_path)
+                func = getattr(mod, func_name)
+                self._tool_executors[tool_name] = func
+                registered += 1
+            except Exception as e:
+                logger.warning("工具 '%s' 自动注册失败: %s", tool_name, e)
+
+        if registered > 0:
+            logger.info("自动注册 %d/%d 个工具执行器", registered, len(tool_imports))
 
     def _stub_executor(self, name: str, args: dict) -> dict:
         """占位执行器：当工具尚未实现时返回提示信息。

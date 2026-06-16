@@ -243,8 +243,9 @@ def test_action_validation():
     assert "缺少必填参数" in results[0]["error"]
     print(f"   [OK] 必填参数缺失检出: {results[0]['error']}")
 
-    # 测试3：未注册的工具使用 stub
+    # 测试3：未注册的工具使用 stub（清空自动注册的执行器来模拟）
     tool_calls = [{"id": "c3", "name": "query_cve", "arguments": {"keyword": "log4j"}}]
+    engine._tool_executors.clear()  # 清空自动注册，模拟未注册场景
     engine.step_count = 2
     results = engine._do_action(tool_calls)
     assert results[0]["error"] is None  # stub 不算错误

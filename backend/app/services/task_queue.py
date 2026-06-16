@@ -219,6 +219,21 @@ def get_queue_status() -> dict:
 # 步骤持久化
 # ============================================================================
 
+def _truncate_step_data(data: dict, max_str_len: int = 500) -> dict:
+    """递归截断步骤数据中的长字符串值，确保序列化后的 JSON 不会过大。
+
+    对字典和列表中的字符串值进行截断，保留数据结构完整性，
+    避免 json.dumps 后再截断导致 JSON 格式不合法。
+    """
+    if isinstance(data, dict):
+        return {k: _truncate_step_data(v, max_str_len) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [_truncate_step_data(item, max_str_len) for item in data]
+    elif isinstance(data, str) and len(data) > max_str_len:
+        return data[:max_str_len] + "...(已截断)"
+    return data
+
+
 def _save_step(task_id: int, step: dict) -> None:
     """将单个分析步骤写入数据库。"""
     from ..models.database import AnalysisStep
@@ -229,18 +244,29 @@ def _save_step(task_id: int, step: dict) -> None:
         step_type = step.get("type", "")
         data = step.get("data", {})
 
+        # 先截断数据中的长值，再序列化，避免截断后 JSON 格式不合法
+        truncated_data = _truncate_step_data(data, max_str_len=500)
+
         thought = None
         action = None
         observation = None
 
         if step_type == "thought":
-            thought = json.dumps(data, ensure_ascii=False)[:2000]
+            thought = json.dumps(truncated_data, ensure_ascii=False)
         elif step_type == "action":
-            action = json.dumps(data, ensure_ascii=False)[:2000]
+            action = json.dumps(truncated_data, ensure_ascii=False)
         elif step_type == "observation":
-            observation = json.dumps(data, ensure_ascii=False)[:2000]
+            observation = json.dumps(truncated_data, ensure_ascii=False)
         else:
-            observation = json.dumps(data, ensure_ascii=False)[:2000]
+            observation = json.dumps(truncated_data, ensure_ascii=False)
+
+        # 最终安全截断（确保不会超长，但此时 JSON 已经是合法的）
+        if thought and len(thought) > 4000:
+            thought = thought[:4000]
+        if action and len(action) > 4000:
+            action = action[:4000]
+        if observation and len(observation) > 4000:
+            observation = observation[:4000]
 
         record = AnalysisStep(
             task_id=task_id,
