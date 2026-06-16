@@ -886,7 +886,12 @@ const Report = () => {
     return resultData.SUMMARY || resultData.rawAnalysis || malwareResult?.overall_assessment || null
   }, [resultData, malwareResult])
 
-  const riskLevel = (task as any)?.severity || 'info'
+  // 从 result_json 解析风险等级
+  const riskLevel = useMemo(() => {
+    if (!resultData) return 'info'
+    return resultData.confidence?.level || resultData.severity || 'info'
+  }, [resultData])
+
   const analyzedAt = task?.updated_at
     ? new Date(task.updated_at).toLocaleString('zh-CN', {
         year: 'numeric',
@@ -897,8 +902,23 @@ const Report = () => {
         second: '2-digit',
       })
     : '--'
-  const duration = (task as any)?.duration || '--'
-  const vulnCount = (task as any)?.vulnCount ?? vulnerabilities.length
+
+  // 从 created_at 和 updated_at 计算分析耗时
+  const duration = useMemo(() => {
+    if (!task?.created_at || !task?.updated_at) return '--'
+    const start = new Date(task.created_at).getTime()
+    const end = new Date(task.updated_at).getTime()
+    const diffSec = Math.round((end - start) / 1000)
+    if (diffSec < 60) return `${diffSec}s`
+    const min = Math.floor(diffSec / 60)
+    const sec = diffSec % 60
+    return `${min}m ${sec}s`
+  }, [task?.created_at, task?.updated_at])
+
+  const vulnCount = resultData?.aggregated?.summary?.scan_findings_count
+    || resultData?.aggregated?.summary?.total_findings
+    || (resultData?.aggregated?.summary?.high_risk_count + resultData?.aggregated?.summary?.medium_risk_count + resultData?.aggregated?.summary?.low_risk_count)
+    || vulnerabilities.length
   const typeLabel = taskTypeLabels[task?.type || ''] || task?.type || '未知类型'
 
   // ─── 5.1-1: Target file/code name ────────────────

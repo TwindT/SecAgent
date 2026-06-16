@@ -1,8 +1,8 @@
 """
 任务执行器 — 桥接 Agent 引擎与 WebSocket 推送。
 
-将引擎的 on_step 回调连接到 WebSocket ConnectionManager，
-实现分析过程的实时推送。
+将引擎的 on_step 回调通过 Redis Pub/Sub 转发到 FastAPI 服务端，
+由服务端的 WebSocket ConnectionManager 推送给前端客户端。
 
 WebSocket 推送消息格式（符合 2.5 约定）：
     {
@@ -15,15 +15,29 @@ WebSocket 推送消息格式（符合 2.5 约定）：
     }
 """
 
+import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+import redis
+
 from ..agent.engine import AgentEngine
 from ..agent.llm import LLMClient
-from ..websocket import manager
 
 logger = logging.getLogger(__name__)
+
+# Redis 连接（Celery worker 进程使用，用于发布消息到 FastAPI 服务端）
+_redis_client = None
+
+def _get_redis_client():
+    """延迟获取 Redis 客户端（与 Celery 共用同一个 Redis 实例）。"""
+    global _redis_client
+    if _redis_client is None:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        _redis_client = redis.from_url(redis_url)
+    return _redis_client
 
 # ------------------------------------------------------------------
 # 工具注册（将已实现的工具注入 Agent 引擎）
@@ -32,7 +46,7 @@ logger = logging.getLogger(__name__)
 def _register_tools(engine: AgentEngine) -> None:
     """将已实现的工具注册到引擎，替换占位 stub executor。"""
     try:
-        from ..tools import scan_code, query_cve, query_cwe, query_threat_intel, extract_iocs, map_attack, scan_yara
+        from ..tools import scan_code, query_cve, query_cwe, query_threat_intel, extract_iocs, map_attack, scan_yara, extract_file_features
         engine.register_tool("scan_code", scan_code)
         engine.register_tool("query_cve", query_cve)
         engine.register_tool("query_cwe", query_cwe)
@@ -40,16 +54,18 @@ def _register_tools(engine: AgentEngine) -> None:
         engine.register_tool("extract_iocs", extract_iocs)
         engine.register_tool("map_attack", map_attack)
         engine.register_tool("scan_yara", scan_yara)
-        logger.info("已注册 %d 个工具执行器", 7)
+        engine.register_tool("extract_file_features", extract_file_features)
+        logger.info("已注册 %d 个工具执行器", 8)
     except Exception as e:
         logger.warning("工具注册失败，将使用 stub executor: %s", e)
 
 
 def _make_ws_callback(task_id: str):
-    """创建 WebSocket 推送回调闭包。
+    """创建 Redis Pub/Sub 推送回调闭包。
 
-    返回一个 callable，接收引擎的 step dict，
-    按照约定格式标准化后转发到 WebSocket 管理器广播给订阅该任务的客户端。
+    Celery worker 运行在独立进程中，无法直接访问 FastAPI 服务端的
+    WebSocket ConnectionManager。因此通过 Redis Pub/Sub 将消息发布到
+    ``ws:{task_id}`` 频道，由 FastAPI 服务端订阅并推送给前端客户端。
 
     推送数据结构（2.5 规范）：
         type: "thought" | "action" | "observation" | "done" | "error"
@@ -63,36 +79,30 @@ def _make_ws_callback(task_id: str):
             - error       : { message, elapsed_seconds }
     """
 
-    async def _push(step: dict) -> None:
-        """异步推送单个分析步骤到 WebSocket。"""
-        # 将 step_num 合并到 data 中，顶层只保留 type + data
-        payload_data: dict = {
-            "step_num": step.get("step_num", 0),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        payload_data.update(step.get("data", {}))
-
-        msg = {
-            "type": step["type"],
-            "data": payload_data,
-        }
-        await manager.send_message(task_id, msg)
-
     def on_step(step: dict) -> None:
-        """同步回调入口（由引擎在同步上下文中调用）。"""
-        import asyncio
+        """同步回调入口（由引擎在同步上下文中调用）。
 
+        将步骤消息通过 Redis Pub/Sub 发布到 ws:{task_id} 频道，
+        FastAPI 服务端的订阅者会接收并推送给 WebSocket 客户端。
+        """
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_push(step))
-            else:
-                asyncio.run(_push(step))
-        except RuntimeError:
-            # 无事件循环时创建新的
-            asyncio.run(_push(step))
+            payload_data: dict = {
+                "step_num": step.get("step_num", 0),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            payload_data.update(step.get("data", {}))
+
+            msg = {
+                "type": step["type"],
+                "data": payload_data,
+            }
+
+            r = _get_redis_client()
+            channel = f"ws:{task_id}"
+            r.publish(channel, json.dumps(msg, ensure_ascii=False))
+            logger.debug("Redis 发布: channel=%s type=%s", channel, msg["type"])
         except Exception as e:
-            logger.warning("WebSocket 推送失败: %s", e)
+            logger.warning("Redis Pub/Sub 发布失败: %s", e)
 
     return on_step
 

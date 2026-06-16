@@ -19,9 +19,10 @@ class ConversationRoleEnum(str, Enum):
 
 class CreateTaskRequest(BaseModel):
     type: TaskTypeEnum
+    name: Optional[str] = None
     input_content: Optional[str] = None
     input_path: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -43,6 +44,7 @@ class AnalysisStepResponse(BaseModel):
 
 class TaskResponse(BaseModel):
     id: int
+    name: Optional[str] = None
     type: str
     status: str
     input_path: Optional[str]

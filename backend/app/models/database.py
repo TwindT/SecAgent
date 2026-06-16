@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
 Base = declarative_base()
@@ -22,41 +22,42 @@ class ConversationRole(PyEnum):
 
 class Task(Base):
     __tablename__ = "task"
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=True)
     type = Column(Enum(TaskType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     status = Column(Enum(TaskStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=TaskStatus.PENDING)
     input_path = Column(String(500))
     input_content = Column(Text)
     result_json = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
     analysis_steps = relationship("AnalysisStep", back_populates="task", cascade="all, delete-orphan")
     conversations = relationship("Conversation", back_populates="task", cascade="all, delete-orphan")
 
 class AnalysisStep(Base):
     __tablename__ = "analysis_step"
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(Integer, ForeignKey("task.id"), nullable=False)
     step_num = Column(Integer, nullable=False)
     thought = Column(Text)
     action = Column(Text)
     observation = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
     task = relationship("Task", back_populates="analysis_steps")
 
 class Conversation(Base):
     __tablename__ = "conversation"
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(Integer, ForeignKey("task.id"), nullable=False)
     role = Column(Enum(ConversationRole, values_callable=lambda x: [e.value for e in x]), nullable=False)
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
     task = relationship("Task", back_populates="conversations")
 
 engine = None

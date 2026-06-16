@@ -1,5 +1,7 @@
 import logging
 import os
+import json
+import asyncio
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
@@ -41,8 +43,71 @@ app.include_router(tasks_router)
 app.include_router(upload_router)
 
 
+# ---------------------------------------------------------------------------
+# Redis Pub/Sub 订阅 — 接收 Celery worker 发布的 WebSocket 消息
+# ---------------------------------------------------------------------------
+
+_redis_subscriber_task = None
+
+
+async def _redis_subscriber():
+    """后台任务：订阅 Redis ws:* 频道，将消息转发给 WebSocket 客户端。
+
+    Celery worker 运行在独立进程中，无法直接访问 FastAPI 的
+    ConnectionManager。因此 worker 通过 Redis Pub/Sub 发布消息到
+    ``ws:{task_id}`` 频道，本订阅者接收后调用 manager.send_message()
+    推送给前端 WebSocket 客户端。
+    """
+    import redis.asyncio as aioredis
+
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    r = aioredis.from_url(redis_url)
+    pubsub = r.pubsub()
+
+    try:
+        # 订阅所有 ws:* 频道
+        await pubsub.psubscribe("ws:*")
+        logger.info("Redis Pub/Sub 订阅已启动: ws:*")
+
+        async for message in pubsub.listen():
+            if message["type"] not in ("pmessage",):
+                continue
+
+            channel = message["channel"]
+            if isinstance(channel, bytes):
+                channel = channel.decode("utf-8")
+
+            # 从频道名提取 task_id: "ws:{task_id}" → task_id
+            task_id = channel.replace("ws:", "", 1)
+
+            data = message["data"]
+            if isinstance(data, bytes):
+                data = data.decode("utf-8")
+
+            try:
+                msg = json.loads(data)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Redis 消息解析失败: channel=%s", channel)
+                continue
+
+            # 转发给 WebSocket ConnectionManager
+            try:
+                await manager.send_message(task_id, msg)
+            except Exception as e:
+                logger.warning("WebSocket 转发失败: task_id=%s error=%s", task_id, e)
+
+    except asyncio.CancelledError:
+        logger.info("Redis Pub/Sub 订阅已取消")
+    except Exception as e:
+        logger.error("Redis Pub/Sub 订阅异常: %s", e)
+    finally:
+        await pubsub.punsubscribe("ws:*")
+        await pubsub.aclose()
+        await r.aclose()
+
+
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     database_url = os.getenv("DATABASE_URL", "sqlite:///./app.db")
     init_db(database_url)
     logger.info("数据库已初始化: %s", database_url)
@@ -51,6 +116,24 @@ def on_startup():
     from .services.cleanup import ensure_clean_dirs
     ensure_clean_dirs()
     logger.info("临时目录已就绪")
+
+    # 启动 Redis Pub/Sub 订阅后台任务
+    global _redis_subscriber_task
+    _redis_subscriber_task = asyncio.create_task(_redis_subscriber())
+    logger.info("Redis Pub/Sub 订阅后台任务已启动")
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    """关闭时取消 Redis 订阅后台任务。"""
+    global _redis_subscriber_task
+    if _redis_subscriber_task:
+        _redis_subscriber_task.cancel()
+        try:
+            await _redis_subscriber_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Redis Pub/Sub 订阅后台任务已停止")
 
 
 @app.get("/")
@@ -68,11 +151,11 @@ def get_stats(db: Session = Depends(get_db)):
     """获取仪表盘统计数据：总任务数、今日任务数、高危数、平均耗时、近期任务等。"""
     from .models import Task, TaskStatus, TaskType, TaskResponse
     from .models.database import AnalysisStep, Conversation
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from sqlalchemy import func
     from sqlalchemy.orm import load_only, noload
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # 总任务数
@@ -81,7 +164,7 @@ def get_stats(db: Session = Depends(get_db)):
     # 今日任务数
     today_tasks = db.query(func.count(Task.id)).filter(Task.created_at >= today_start).scalar() or 0
 
-    # 高危任务数（从 result_json 中提取 severity）
+    # 高危任务数（从 result_json 中提取 severity/confidence.level）
     all_done_tasks = db.query(Task).filter(Task.status == TaskStatus.DONE).all()
     high_severity_count = 0
     durations = []
@@ -90,7 +173,9 @@ def get_stats(db: Session = Depends(get_db)):
             try:
                 import json
                 result = json.loads(t.result_json)
-                if result.get("severity") == "high":
+                # 优先从 confidence.level 获取，其次从顶层 severity 获取
+                sev = result.get("confidence", {}).get("level") or result.get("severity", "")
+                if sev == "high":
                     high_severity_count += 1
             except (json.JSONDecodeError, AttributeError):
                 pass
@@ -124,9 +209,12 @@ def get_stats(db: Session = Depends(get_db)):
             try:
                 import json
                 result = json.loads(t.result_json)
-                sev = result.get("severity", "info")
+                # 优先从 confidence.level 获取，其次从顶层 severity 获取
+                sev = result.get("confidence", {}).get("level") or result.get("severity", "info")
                 if sev in severity_counts:
                     severity_counts[sev] += 1
+                else:
+                    severity_counts["info"] += 1
             except (json.JSONDecodeError, AttributeError):
                 pass
     tasks_by_severity = [{"severity": k, "count": v} for k, v in severity_counts.items()]

@@ -3,7 +3,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.database import init_db, get_db, Task, TaskType, TaskStatus
-from datetime import datetime
+from datetime import datetime, timezone
 
 def test_database():
     print("Initializing database...")
@@ -16,7 +16,7 @@ def test_database():
         type=TaskType.VULNERABILITY_DETECTION,
         status=TaskStatus.PENDING,
         input_content="print('Hello, SecAgent!')",
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     
     db.add(test_task)

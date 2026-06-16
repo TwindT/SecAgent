@@ -90,8 +90,19 @@ function getSeverityBadge(severity: string | null | undefined) {
 
 // ─── Derive display name from task ──────────────────
 function getTaskDisplayName(task: TaskResponse): string {
+  // 优先使用用户指定的任务名称
+  if (task.name) {
+    return task.name;
+  }
   if (task.input_path) {
-    return task.input_path.split('/').pop() || task.input_path;
+    // 去掉上传时的 hash 前缀（格式: abc123_filename.ext → filename.ext）
+    const filename = task.input_path.split('/').pop() || task.input_path;
+    const underscoreIdx = filename.indexOf('_');
+    // 如果文件名格式为 hash_originalname，提取 originalname
+    if (underscoreIdx > 0 && underscoreIdx < 12) {
+      return filename.substring(underscoreIdx + 1);
+    }
+    return filename;
   }
   if (task.input_content) {
     return `代码片段 #${task.id}`;
@@ -645,8 +656,21 @@ const History = () => {
               if (task.result_json) {
                 try {
                   const result = JSON.parse(task.result_json);
-                  severity = result.severity || null;
-                  vulnCount = result.vulnCount || result.vuln_count || 0;
+                  // severity 优先从 confidence.level 获取
+                  if (result.confidence?.level) {
+                    severity = result.confidence.level;
+                  } else if (result.severity) {
+                    severity = result.severity;
+                  }
+                  // vulnCount 从 aggregated.summary 获取
+                  if (result.aggregated?.summary) {
+                    const summary = result.aggregated.summary;
+                    vulnCount = summary.scan_findings_count || summary.total_findings || summary.high_risk_count + summary.medium_risk_count + summary.low_risk_count || 0;
+                  } else if (result.vulnCount) {
+                    vulnCount = result.vulnCount;
+                  } else if (result.vuln_count) {
+                    vulnCount = result.vuln_count;
+                  }
                 } catch {
                   // ignore parse error
                 }

@@ -8,10 +8,17 @@
 
 import re
 import logging
-
-from data.attack_loader import ATTACKLoader
+import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# 确保 backend/ 目录在 sys.path 中，以便导入 data 包
+_BACKEND_DIR = str(Path(__file__).resolve().parent.parent.parent)
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from data.attack_loader import ATTACKLoader
 
 # 全局单例，延迟加载
 _loader: ATTACKLoader | None = None

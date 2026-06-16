@@ -60,6 +60,7 @@ export type TaskStatus = 'pending' | 'analyzing' | 'done' | 'failed';
 
 export interface CreateTaskParams {
   type: TaskType;
+  name?: string;
   input_content?: string;
   input_path?: string;
 }
@@ -81,6 +82,7 @@ export interface AnalysisStep {
 
 export interface TaskResponse {
   id: number;
+  name?: string;
   type: TaskType;
   status: TaskStatus;
   input_path?: string;

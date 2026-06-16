@@ -988,7 +988,7 @@ const Dashboard = () => {
 
                   {/* Severity + Status */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    {getSeverityDot(task.result_json ? (() => { try { return JSON.parse(task.result_json).severity } catch { return null } })() : null)}
+                    {getSeverityDot(task.result_json ? (() => { try { const r = JSON.parse(task.result_json); return r.confidence?.level || r.severity || null } catch { return null } })() : null)}
                     {getStatusTag(task.status)}
                   </div>
                 </div>

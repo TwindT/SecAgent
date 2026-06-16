@@ -30,6 +30,21 @@ interface DisplayStep {
   timestamp: string;
 }
 
+// ─── localStorage helpers for active task ───────────
+const ACTIVE_TASK_KEY = 'secagent_active_task';
+
+function saveActiveTask(taskId: string) {
+  localStorage.setItem(ACTIVE_TASK_KEY, taskId);
+}
+
+function getActiveTask(): string | null {
+  return localStorage.getItem(ACTIVE_TASK_KEY);
+}
+
+function clearActiveTask() {
+  localStorage.removeItem(ACTIVE_TASK_KEY);
+}
+
 // ─── Step Config ────────────────────────────────────
 const stepConfig: Record<
   StepType,
@@ -105,10 +120,66 @@ const Analysis = () => {
       const data = msg.data;
 
       if (msg.type === 'thought' || msg.type === 'action' || msg.type === 'observation' || msg.type === 'done' || msg.type === 'error') {
-        const stepNum = data.stepNum as number;
-        const title = (data.title as string) || '';
-        const content = (data.content as string) || '';
-        const detail = data.detail as string | undefined;
+        // 后端发送 step_num（snake_case），兼容两种格式
+        const stepNum = (data.step_num ?? data.stepNum) as number;
+
+        // 根据消息类型提取 title / content / detail
+        let title = '';
+        let content = '';
+        let detail: string | undefined;
+
+        switch (msg.type) {
+          case 'thought':
+            title = '思考';
+            content = (data.content as string) || '';
+            if (data.tool_calls_requested && (data.tool_calls_requested as string[]).length > 0) {
+              detail = `请求工具: ${(data.tool_calls_requested as string[]).join(', ')}`;
+            }
+            if (data.finish_reason) {
+              detail = detail ? `${detail}\n结束原因: ${data.finish_reason}` : `结束原因: ${data.finish_reason}`;
+            }
+            break;
+          case 'action': {
+            title = '执行操作';
+            const results = data.results as Array<{ name: string; ok: boolean; args?: Record<string, unknown> }> | undefined;
+            if (results && results.length > 0) {
+              content = results.map(r => `${r.name}(${r.ok ? '成功' : '失败'})`).join(', ');
+              detail = JSON.stringify(results, null, 2);
+            } else {
+              content = '执行工具操作';
+            }
+            break;
+          }
+          case 'observation': {
+            title = '观察结果';
+            const observations = data.observations as Array<{ tool: string; result_preview: string }> | undefined;
+            if (observations && observations.length > 0) {
+              content = observations.map(o => `${o.tool}: ${o.result_preview}`).join('\n');
+              if (observations.length > 1 || content.length > 200) {
+                detail = JSON.stringify(observations, null, 2);
+              }
+            } else {
+              content = '获取工具返回结果';
+            }
+            break;
+          }
+          case 'done':
+            title = '分析完成';
+            content = (data.message as string) || '分析完成';
+            detail = [
+              `耗时: ${data.elapsed_seconds}s`,
+              `步骤: ${data.total_steps}`,
+              data.confidence ? `置信度: ${data.confidence}(${data.confidence_score}/100)` : '',
+            ].filter(Boolean).join('\n');
+            break;
+          case 'error':
+            title = '分析错误';
+            content = (data.message as string) || '未知错误';
+            if (data.elapsed_seconds) {
+              detail = `耗时: ${data.elapsed_seconds}s`;
+            }
+            break;
+        }
 
         const newStep: DisplayStep = {
           id: `ws-${stepNum}`,
@@ -131,6 +202,7 @@ const Analysis = () => {
 
         if (msg.type === 'done' || msg.type === 'error') {
           setIsAnalyzing(false);
+          clearActiveTask();
         }
       }
     },
@@ -140,8 +212,21 @@ const Analysis = () => {
   // Connect to WebSocket
   const { isReconnecting } = useWebSocket(taskId, { onMessage: handleWsMessage });
 
-  // No taskId - show empty state directly
+  // Save active task to localStorage when taskId exists
+  useEffect(() => {
+    if (taskId) {
+      saveActiveTask(taskId);
+    }
+  }, [taskId]);
+
+  // No taskId - try to redirect to active task, or show empty state
   if (!taskId) {
+    const activeTask = getActiveTask();
+    if (activeTask) {
+      // Redirect to the active analyzing task
+      navigate(`/analysis/${activeTask}`);
+      return null;
+    }
     return (
       <div style={{ margin: '0 auto', width: '100%', maxWidth: '1200px', padding: '24px 16px' }}>
         <div className="animate-slide-up" style={{ marginBottom: '24px' }}>
@@ -251,12 +336,13 @@ const Analysis = () => {
 
         if (cancelled) return;
 
-        // Derive task name from input_path or input_content
-        const taskName = task.input_path
+        // Derive task name from name field, input_path or input_content
+        const taskName = task.name
+          || (task.input_path
           ? task.input_path.split('/').pop() || task.input_path
           : task.input_content
           ? `代码片段 #${task.id}`
-          : `任务 #${task.id}`;
+          : `任务 #${task.id}`);
 
         setTaskInfo({ type: task.type, name: taskName });
 
@@ -309,9 +395,10 @@ const Analysis = () => {
           // Analysis is auto-triggered on task creation; just poll for step updates
         }
 
-        // If task is already done/failed, stop analyzing
+        // If task is already done/failed, stop analyzing and clear active task
         if (task.status === 'done' || task.status === 'failed') {
           setIsAnalyzing(false);
+          clearActiveTask();
         }
       } catch (error) {
         setTaskNotFound(true);

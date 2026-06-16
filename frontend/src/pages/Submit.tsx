@@ -276,6 +276,7 @@ const Submit = () => {
       if (activeTab === 'code') {
         const result = await createTask({
           type: 'vulnerability_detection',
+          name: deriveTaskName(),
           input_content: code,
         })
         setSuccess(true)
@@ -295,6 +296,7 @@ const Submit = () => {
         const filePath = uploadRes.data.path
         const result = await createTask({
           type: 'malware_analysis',
+          name: deriveTaskName(),
           input_path: filePath,
         })
         setSuccess(true)

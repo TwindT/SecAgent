@@ -47,6 +47,7 @@ conv_manager = ConversationManager()
 def create_task(req: CreateTaskRequest, db: Session = Depends(get_db)):
     """创建分析任务，存入数据库，通过任务队列异步执行，返回 task_id。"""
     task = Task(
+        name=req.name,
         type=TaskType(req.type.value),
         status=TaskStatus.PENDING,
         input_path=req.input_path,
