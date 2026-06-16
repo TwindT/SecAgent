@@ -119,7 +119,8 @@ function parseStepFromRaw(
       title = '思考';
       try {
         const parsed = JSON.parse(rawContent);
-        content = parsed.content || rawContent;
+        // 当 content 为空时，不显示原始 JSON，由 detail 区域展示关键信息
+        content = parsed.content ?? '';
         if (parsed.tool_calls_requested && Array.isArray(parsed.tool_calls_requested) && parsed.tool_calls_requested.length > 0) {
           detail = `请求工具: ${parsed.tool_calls_requested.join(', ')}`;
         }
@@ -203,7 +204,17 @@ function parseStepFromRaw(
             else if (o.results_count !== undefined) line += `: ${o.results_count} 条结果`;
             else if (o.techniques_count !== undefined) line += `: ${o.techniques_count} 项 ATT&CK 技术`;
             else if (o.matches_count !== undefined) line += `: ${o.matches_count} 条 YARA 匹配`;
-            else line += `: ${o.result_preview}`;
+            else {
+              // 尝试解析 result_preview 中的 JSON，提取 message 等可读字段
+              let preview = o.result_preview;
+              try {
+                const parsed = JSON.parse(preview);
+                preview = parsed.message || parsed.summary || preview;
+              } catch {
+                // 非 JSON，直接使用
+              }
+              line += `: ${preview}`;
+            }
             return line;
           }).join('\n');
           // 生成可读文本详情，而非原始 JSON
@@ -326,7 +337,7 @@ const Analysis = () => {
         switch (msg.type) {
           case 'thought':
             title = '思考';
-            content = (data.content as string) || '';
+            content = (data.content as string) ?? '';
             if (data.tool_calls_requested && (data.tool_calls_requested as string[]).length > 0) {
               detail = `请求工具: ${(data.tool_calls_requested as string[]).join(', ')}`;
             }
@@ -389,7 +400,17 @@ const Analysis = () => {
                 else if (o.results_count !== undefined) line += `: ${o.results_count} 条结果`;
                 else if (o.techniques_count !== undefined) line += `: ${o.techniques_count} 项 ATT&CK 技术`;
                 else if (o.matches_count !== undefined) line += `: ${o.matches_count} 条 YARA 匹配`;
-                else line += `: ${o.result_preview}`;
+                else {
+                  // 尝试解析 result_preview 中的 JSON，提取 message 等可读字段
+                  let preview = o.result_preview;
+                  try {
+                    const parsed = JSON.parse(preview);
+                    preview = parsed.message || parsed.summary || preview;
+                  } catch {
+                    // 非 JSON，直接使用
+                  }
+                  line += `: ${preview}`;
+                }
                 return line;
               }).join('\n');
               // 生成可读文本详情
@@ -761,7 +782,7 @@ const Analysis = () => {
     });
   };
 
-  const progressPct = totalSteps > 0 ? Math.round((steps.length / totalSteps) * 100) : 0;
+  const progressPct = steps.length > 0 ? Math.min(Math.round((steps.length / Math.max(totalSteps, steps.length)) * 100), 100) : 0;
 
   // Task not found state
   if (taskNotFound) {
@@ -956,7 +977,7 @@ const Analysis = () => {
             }}
           >
             <span style={{ color: 'var(--text-secondary)' }}>
-              步骤 {steps.length} / {totalSteps}
+              步骤 {steps.length}
             </span>
             <span
               style={{
