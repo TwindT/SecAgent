@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Spin } from 'antd';
 import {
@@ -98,6 +98,124 @@ const typeLabels: Record<string, string> = {
   vulnerability_detection: '代码漏洞检测',
   malware_analysis: '恶意代码分析',
 };
+
+// ─── Shared step parser ─────────────────────────────
+/**
+ * 将后端存储的原始 step 数据（JSON 字符串）解析为 DisplayStep
+ * 同时用于 WebSocket 路径和 HTTP 轮询路径
+ */
+function parseStepFromRaw(
+  stepType: StepType,
+  rawContent: string,
+  stepId: string,
+  createdAt: string,
+): DisplayStep {
+  let title = '';
+  let content = rawContent;
+  let detail: string | undefined;
+
+  switch (stepType) {
+    case 'thought': {
+      title = '思考';
+      try {
+        const parsed = JSON.parse(rawContent);
+        content = parsed.content || rawContent;
+        if (parsed.tool_calls_requested && Array.isArray(parsed.tool_calls_requested) && parsed.tool_calls_requested.length > 0) {
+          detail = `请求工具: ${parsed.tool_calls_requested.join(', ')}`;
+        }
+        if (parsed.finish_reason) {
+          detail = detail ? `${detail}\n结束原因: ${parsed.finish_reason}` : `结束原因: ${parsed.finish_reason}`;
+        }
+      } catch {
+        // 非 JSON 字符串，直接使用
+      }
+      break;
+    }
+    case 'action': {
+      title = '执行操作';
+      try {
+        const parsed = JSON.parse(rawContent);
+        const results = parsed.results as Array<{
+          name: string; ok: boolean; args?: Record<string, unknown>;
+          findings_count?: number; iocs_count?: number; results_count?: number;
+          techniques_count?: number; matches_count?: number;
+          result_preview?: string; message?: string; status?: string; error?: string;
+        }> | undefined;
+        if (results && results.length > 0) {
+          content = results.map(r => {
+            let line = `${r.name}(${r.ok ? '成功' : '失败'})`;
+            if (r.findings_count !== undefined) line += ` - 发现 ${r.findings_count} 个漏洞`;
+            else if (r.iocs_count !== undefined) line += ` - 提取 ${r.iocs_count} 个 IOC`;
+            else if (r.results_count !== undefined) line += ` - ${r.results_count} 条结果`;
+            else if (r.techniques_count !== undefined) line += ` - ${r.techniques_count} 项技术`;
+            else if (r.matches_count !== undefined) line += ` - ${r.matches_count} 条匹配`;
+            else if (r.message) line += ` - ${r.message}`;
+            else if (r.error) line += ` - 错误: ${r.error}`;
+            return line;
+          }).join(', ');
+          detail = JSON.stringify(results, null, 2);
+        } else {
+          content = rawContent;
+        }
+      } catch {
+        content = rawContent;
+      }
+      break;
+    }
+    case 'observation': {
+      title = '观察结果';
+      try {
+        const parsed = JSON.parse(rawContent);
+        const observations = parsed.observations as Array<{
+          tool: string; result_preview: string; result_full?: string;
+          findings_count?: number; iocs_count?: number; results_count?: number;
+          techniques_count?: number; matches_count?: number;
+        }> | undefined;
+        if (observations && observations.length > 0) {
+          content = observations.map(o => {
+            let line = `${o.tool}`;
+            if (o.findings_count !== undefined) line += `: 发现 ${o.findings_count} 个漏洞`;
+            else if (o.iocs_count !== undefined) line += `: 提取 ${o.iocs_count} 个 IOC`;
+            else if (o.results_count !== undefined) line += `: ${o.results_count} 条结果`;
+            else if (o.techniques_count !== undefined) line += `: ${o.techniques_count} 项 ATT&CK 技术`;
+            else if (o.matches_count !== undefined) line += `: ${o.matches_count} 条 YARA 匹配`;
+            else line += `: ${o.result_preview}`;
+            return line;
+          }).join('\n');
+          const fullResults = observations.map(o => {
+            const resultData = o.result_full || o.result_preview;
+            try {
+              return { tool: o.tool, result: JSON.parse(resultData) };
+            } catch {
+              return { tool: o.tool, result: resultData };
+            }
+          });
+          detail = JSON.stringify(fullResults, null, 2);
+        } else {
+          content = rawContent;
+        }
+      } catch {
+        content = rawContent;
+      }
+      break;
+    }
+    default:
+      title = stepType;
+  }
+
+  return {
+    id: stepId,
+    type: stepType,
+    title,
+    content,
+    detail,
+    timestamp: new Date(createdAt).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }),
+  };
+}
 
 // ─── Component ──────────────────────────────────────
 const Analysis = () => {
@@ -379,35 +497,19 @@ const Analysis = () => {
         // Convert existing steps to display format
         if (task.analysis_steps && task.analysis_steps.length > 0) {
           const displaySteps: DisplayStep[] = task.analysis_steps.map((step: AnalysisStep) => {
-            // Determine step type from available fields
             let stepType: StepType = 'thought';
-            let stepTitle = '';
-            let stepContent = '';
+            let rawContent = '';
             if (step.thought) {
               stepType = 'thought';
-              stepTitle = '思考';
-              stepContent = step.thought;
+              rawContent = step.thought;
             } else if (step.action) {
               stepType = 'action';
-              stepTitle = '执行操作';
-              stepContent = step.action;
+              rawContent = step.action;
             } else if (step.observation) {
               stepType = 'observation';
-              stepTitle = '观察结果';
-              stepContent = step.observation;
+              rawContent = step.observation;
             }
-
-            return {
-              id: `step-${step.id}`,
-              type: stepType,
-              title: stepTitle,
-              content: stepContent,
-              timestamp: new Date(step.created_at).toLocaleTimeString('zh-CN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-              }),
-            };
+            return parseStepFromRaw(stepType, rawContent, `step-${step.id}`, step.created_at);
           });
           setSteps(displaySteps);
           setExpandedSteps(new Set(displaySteps.map((s) => s.id)));
@@ -458,90 +560,41 @@ const Analysis = () => {
         const apiSteps: AnalysisStep[] = stepsRes.data;
 
         if (apiSteps && apiSteps.length > 0) {
-          // 将 API 步骤转换为 DisplayStep 并补充到 steps 中
+          // 将 API 步骤转换为 DisplayStep
           const newDisplaySteps: DisplayStep[] = apiSteps.map((step: AnalysisStep) => {
             let stepType: StepType = 'thought';
-            let stepTitle = '';
-            let stepContent = '';
-            let stepDetail: string | undefined;
-
+            let rawContent = '';
             if (step.thought) {
               stepType = 'thought';
-              stepTitle = '思考';
-              try {
-                const parsed = JSON.parse(step.thought);
-                stepContent = parsed.content || step.thought;
-                if (parsed.tool_calls_requested && parsed.tool_calls_requested.length > 0) {
-                  stepDetail = `请求工具: ${parsed.tool_calls_requested.join(', ')}`;
-                }
-              } catch {
-                stepContent = step.thought;
-              }
+              rawContent = step.thought;
             } else if (step.action) {
               stepType = 'action';
-              stepTitle = '执行操作';
-              try {
-                const parsed = JSON.parse(step.action);
-                const results = parsed.results as Array<{ name: string; ok: boolean; args?: Record<string, unknown> }> | undefined;
-                if (results && results.length > 0) {
-                  stepContent = results.map(r => `${r.name}(${r.ok ? '成功' : '失败'})`).join(', ');
-                  stepDetail = JSON.stringify(results, null, 2);
-                } else {
-                  stepContent = step.action;
-                }
-              } catch {
-                stepContent = step.action;
-              }
+              rawContent = step.action;
             } else if (step.observation) {
               stepType = 'observation';
-              stepTitle = '观察结果';
-              try {
-                const parsed = JSON.parse(step.observation);
-                const observations = parsed.observations as Array<{ tool: string; result_preview: string }> | undefined;
-                if (observations && observations.length > 0) {
-                  stepContent = observations.map(o => `${o.tool}: ${o.result_preview}`).join('\n');
-                  if (observations.length > 1 || stepContent.length > 200) {
-                    stepDetail = JSON.stringify(observations, null, 2);
-                  }
-                } else {
-                  stepContent = step.observation;
-                }
-              } catch {
-                stepContent = step.observation;
-              }
+              rawContent = step.observation;
             }
-
-            return {
-              id: `step-${step.id}`,
-              type: stepType,
-              title: stepTitle,
-              content: stepContent,
-              detail: stepDetail,
-              timestamp: new Date(step.created_at).toLocaleTimeString('zh-CN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-              }),
-            };
+            return parseStepFromRaw(stepType, rawContent, `step-${step.id}`, step.created_at);
           });
 
+          // 找出新增的步骤，逐个延迟添加以实现流式动画效果
           setSteps((prev) => {
-            // 合并：保留已有的步骤，补充 API 中新增的步骤
             const existingIds = new Set(prev.map(s => s.id));
-            const merged = [...prev];
-            for (const ds of newDisplaySteps) {
-              if (!existingIds.has(ds.id)) {
-                merged.push(ds);
-              }
-            }
-            return merged;
-          });
-          setExpandedSteps((prev) => {
-            const newSet = new Set(prev);
-            for (const ds of newDisplaySteps) {
-              newSet.add(ds.id);
-            }
-            return newSet;
+            const trulyNew = newDisplaySteps.filter(ds => !existingIds.has(ds.id));
+            if (trulyNew.length === 0) return prev;
+
+            // 逐个延迟添加新步骤，产生流式出现效果
+            trulyNew.forEach((ds, i) => {
+              setTimeout(() => {
+                setSteps(p => {
+                  if (p.some(s => s.id === ds.id)) return p;
+                  return [...p, ds];
+                });
+                setExpandedSteps(p => new Set([...p, ds.id]));
+              }, i * 300); // 每个新步骤间隔 300ms 出现
+            });
+
+            return prev;
           });
         }
 

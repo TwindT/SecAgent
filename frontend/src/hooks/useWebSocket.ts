@@ -32,6 +32,20 @@ function safeParseField(value: unknown): unknown {
  * 后端可能将 results/observations 等字段序列化为字符串
  */
 export function normalizeWSMessage(msg: WSMessage): WSMessage {
+  // 情况1: data 本身是 JSON 字符串（整个 data 被序列化了）
+  if (typeof msg.data === 'string') {
+    try {
+      const parsed = JSON.parse(msg.data);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return normalizeWSMessage({ ...msg, data: parsed });
+      }
+    } catch {
+      // 解析失败，返回原始消息
+    }
+    return msg;
+  }
+
+  // 情况2: data 是对象，但内部字段可能是 JSON 字符串
   if (!msg.data || typeof msg.data !== 'object') {
     return msg;
   }
@@ -39,7 +53,7 @@ export function normalizeWSMessage(msg: WSMessage): WSMessage {
   const normalizedData: Record<string, unknown> = { ...msg.data };
 
   // 对可能的 JSON 字符串字段进行解析
-  const jsonFields = ['results', 'observations', 'content', 'detail'];
+  const jsonFields = ['results', 'observations', 'content', 'detail', 'data'];
   for (const field of jsonFields) {
     if (field in normalizedData) {
       normalizedData[field] = safeParseField(normalizedData[field]);
