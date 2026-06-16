@@ -71,7 +71,6 @@ function Header() {
 
   return (
     <header
-      className="glass"
       style={{
         position: 'sticky',
         top: 0,
@@ -81,6 +80,7 @@ function Header() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        background: 'transparent',
         borderBottom: '1px solid var(--border-light)',
       }}
     >

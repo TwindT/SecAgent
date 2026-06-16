@@ -48,6 +48,8 @@ docker compose up -d --build frontend
 
 docker compose restart backend
 
+docker compose up -d --build
+
 http://192.168.83.128:8000/docs
 
 cd \SecAgent\backend
