@@ -1051,31 +1051,33 @@ class AgentEngine:
 
         逐个尝试导入工具模块，单个失败不影响其他工具注册。
         注册后 _do_action 将调用真实实现而非 _stub_executor。
+        使用相对导入确保在任何运行环境下都能正确找到模块。
         """
+        # 使用相对导入路径，与 engine.py 所在的 app.agent 包对应
         tool_imports = [
-            ("scan_code", "app.tools.scanner", "scan_code"),
-            ("query_cve", "app.tools.cve_query", "query_cve"),
-            ("query_cwe", "app.tools.cve_query", "query_cwe"),
-            ("query_threat_intel", "app.tools.threat_intel", "query_threat_intel"),
-            ("extract_iocs", "app.tools.ioc_extractor", "extract_iocs"),
-            ("map_attack", "app.tools.attack_mapper", "map_attack"),
-            ("scan_yara", "app.tools.yara_scanner", "scan_yara"),
-            ("extract_file_features", "app.tools.file_analysis", "extract_file_features"),
+            ("scan_code", "..tools.scanner", "scan_code"),
+            ("query_cve", "..tools.cve_query", "query_cve"),
+            ("query_cwe", "..tools.cve_query", "query_cwe"),
+            ("query_threat_intel", "..tools.threat_intel", "query_threat_intel"),
+            ("extract_iocs", "..tools.ioc_extractor", "extract_iocs"),
+            ("map_attack", "..tools.attack_mapper", "map_attack"),
+            ("scan_yara", "..tools.yara_scanner", "scan_yara"),
+            ("extract_file_features", "..tools.file_analysis", "extract_file_features"),
         ]
 
         registered = 0
         import importlib
         for tool_name, module_path, func_name in tool_imports:
             try:
-                mod = importlib.import_module(module_path)
+                mod = importlib.import_module(module_path, package=__package__)
                 func = getattr(mod, func_name)
                 self._tool_executors[tool_name] = func
                 registered += 1
+                logger.info("工具 '%s' 自动注册成功", tool_name)
             except Exception as e:
                 logger.warning("工具 '%s' 自动注册失败: %s", tool_name, e)
 
-        if registered > 0:
-            logger.info("自动注册 %d/%d 个工具执行器", registered, len(tool_imports))
+        logger.info("自动注册 %d/%d 个工具执行器", registered, len(tool_imports))
 
     def _stub_executor(self, name: str, args: dict) -> dict:
         """占位执行器：当工具尚未实现时返回提示信息。

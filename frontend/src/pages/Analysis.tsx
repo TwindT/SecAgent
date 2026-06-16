@@ -153,7 +153,31 @@ function parseStepFromRaw(
             else if (r.error) line += ` - 错误: ${r.error}`;
             return line;
           }).join(', ');
-          detail = JSON.stringify(results, null, 2);
+          // 生成可读文本详情，而非原始 JSON
+          const detailLines: string[] = [];
+          for (const r of results) {
+            detailLines.push(`▸ 工具: ${r.name}  [${r.ok ? '成功' : '失败'}]`);
+            // 显示参数摘要（跳过 code 等超长字段）
+            if (r.args) {
+              for (const [key, val] of Object.entries(r.args)) {
+                const valStr = String(val);
+                if (valStr.length > 100) {
+                  detailLines.push(`  参数 ${key}: ${valStr.slice(0, 100)}...`);
+                } else {
+                  detailLines.push(`  参数 ${key}: ${valStr}`);
+                }
+              }
+            }
+            if (r.status && r.status !== 'ok') detailLines.push(`  状态: ${r.status}`);
+            if (r.message) detailLines.push(`  消息: ${r.message}`);
+            if (r.error) detailLines.push(`  错误: ${r.error}`);
+            if (r.findings_count !== undefined) detailLines.push(`  发现漏洞: ${r.findings_count} 个`);
+            if (r.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${r.iocs_count} 个`);
+            if (r.results_count !== undefined) detailLines.push(`  结果数: ${r.results_count} 条`);
+            if (r.techniques_count !== undefined) detailLines.push(`  ATT&CK 技术: ${r.techniques_count} 项`);
+            if (r.matches_count !== undefined) detailLines.push(`  YARA 匹配: ${r.matches_count} 条`);
+          }
+          detail = detailLines.join('\n');
         } else {
           content = rawContent;
         }
@@ -182,15 +206,67 @@ function parseStepFromRaw(
             else line += `: ${o.result_preview}`;
             return line;
           }).join('\n');
-          const fullResults = observations.map(o => {
+          // 生成可读文本详情，而非原始 JSON
+          const detailLines: string[] = [];
+          for (const o of observations) {
+            detailLines.push(`▸ 工具: ${o.tool}`);
+            if (o.findings_count !== undefined) detailLines.push(`  发现漏洞: ${o.findings_count} 个`);
+            if (o.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${o.iocs_count} 个`);
+            if (o.results_count !== undefined) detailLines.push(`  结果数: ${o.results_count} 条`);
+            if (o.techniques_count !== undefined) detailLines.push(`  ATT&CK 技术: ${o.techniques_count} 项`);
+            if (o.matches_count !== undefined) detailLines.push(`  YARA 匹配: ${o.matches_count} 条`);
+            // 解析 result_preview/result_full 中的可读信息
             const resultData = o.result_full || o.result_preview;
-            try {
-              return { tool: o.tool, result: JSON.parse(resultData) };
-            } catch {
-              return { tool: o.tool, result: resultData };
+            if (resultData) {
+              try {
+                const parsed = JSON.parse(resultData);
+                if (parsed.message) detailLines.push(`  消息: ${parsed.message}`);
+                if (parsed.status) detailLines.push(`  状态: ${parsed.status}`);
+                if (parsed.summary) detailLines.push(`  摘要: ${parsed.summary}`);
+                if (parsed.findings && Array.isArray(parsed.findings)) {
+                  detailLines.push(`  漏洞列表:`);
+                  for (const f of parsed.findings.slice(0, 5)) {
+                    detailLines.push(`    - ${f.rule_id || f.type || '未知'}: ${f.description || f.message || ''}`);
+                  }
+                  if (parsed.findings.length > 5) {
+                    detailLines.push(`    ... 共 ${parsed.findings.length} 条`);
+                  }
+                }
+                if (parsed.iocs && Array.isArray(parsed.iocs)) {
+                  detailLines.push(`  IOC 列表:`);
+                  for (const i of parsed.iocs.slice(0, 5)) {
+                    detailLines.push(`    - ${i.type || '未知'}: ${i.value || i}`);
+                  }
+                  if (parsed.iocs.length > 5) {
+                    detailLines.push(`    ... 共 ${parsed.iocs.length} 条`);
+                  }
+                }
+                if (parsed.techniques && Array.isArray(parsed.techniques)) {
+                  detailLines.push(`  ATT&CK 技术:`);
+                  for (const t of parsed.techniques.slice(0, 5)) {
+                    detailLines.push(`    - ${t.id || '未知'}: ${t.name || ''}`);
+                  }
+                  if (parsed.techniques.length > 5) {
+                    detailLines.push(`    ... 共 ${parsed.techniques.length} 条`);
+                  }
+                }
+                if (parsed.matches && Array.isArray(parsed.matches)) {
+                  detailLines.push(`  YARA 匹配:`);
+                  for (const m of parsed.matches.slice(0, 5)) {
+                    detailLines.push(`    - ${m.rule || '未知规则'}: ${m.description || ''}`);
+                  }
+                  if (parsed.matches.length > 5) {
+                    detailLines.push(`    ... 共 ${parsed.matches.length} 条`);
+                  }
+                }
+              } catch {
+                // 非 JSON，截断显示
+                const preview = resultData.length > 200 ? resultData.slice(0, 200) + '...' : resultData;
+                detailLines.push(`  结果: ${preview}`);
+              }
             }
-          });
-          detail = JSON.stringify(fullResults, null, 2);
+          }
+          detail = detailLines.join('\n');
         } else {
           content = rawContent;
         }
@@ -264,7 +340,6 @@ const Analysis = () => {
             if (results && results.length > 0) {
               content = results.map(r => {
                 let line = `${r.name}(${r.ok ? '成功' : '失败'})`;
-                // 添加关键摘要
                 if (r.findings_count !== undefined) line += ` - 发现 ${r.findings_count} 个漏洞`;
                 else if (r.iocs_count !== undefined) line += ` - 提取 ${r.iocs_count} 个 IOC`;
                 else if (r.results_count !== undefined) line += ` - ${r.results_count} 条结果`;
@@ -274,7 +349,30 @@ const Analysis = () => {
                 else if (r.error) line += ` - 错误: ${r.error}`;
                 return line;
               }).join(', ');
-              detail = JSON.stringify(results, null, 2);
+              // 生成可读文本详情
+              const detailLines: string[] = [];
+              for (const r of results) {
+                detailLines.push(`▸ 工具: ${r.name}  [${r.ok ? '成功' : '失败'}]`);
+                if (r.args) {
+                  for (const [key, val] of Object.entries(r.args)) {
+                    const valStr = String(val);
+                    if (valStr.length > 100) {
+                      detailLines.push(`  参数 ${key}: ${valStr.slice(0, 100)}...`);
+                    } else {
+                      detailLines.push(`  参数 ${key}: ${valStr}`);
+                    }
+                  }
+                }
+                if (r.status && r.status !== 'ok') detailLines.push(`  状态: ${r.status}`);
+                if (r.message) detailLines.push(`  消息: ${r.message}`);
+                if (r.error) detailLines.push(`  错误: ${r.error}`);
+                if (r.findings_count !== undefined) detailLines.push(`  发现漏洞: ${r.findings_count} 个`);
+                if (r.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${r.iocs_count} 个`);
+                if (r.results_count !== undefined) detailLines.push(`  结果数: ${r.results_count} 条`);
+                if (r.techniques_count !== undefined) detailLines.push(`  ATT&CK 技术: ${r.techniques_count} 项`);
+                if (r.matches_count !== undefined) detailLines.push(`  YARA 匹配: ${r.matches_count} 条`);
+              }
+              detail = detailLines.join('\n');
             } else {
               content = '执行工具操作';
             }
@@ -286,7 +384,6 @@ const Analysis = () => {
             if (observations && observations.length > 0) {
               content = observations.map(o => {
                 let line = `${o.tool}`;
-                // 添加关键摘要
                 if (o.findings_count !== undefined) line += `: 发现 ${o.findings_count} 个漏洞`;
                 else if (o.iocs_count !== undefined) line += `: 提取 ${o.iocs_count} 个 IOC`;
                 else if (o.results_count !== undefined) line += `: ${o.results_count} 条结果`;
@@ -295,17 +392,57 @@ const Analysis = () => {
                 else line += `: ${o.result_preview}`;
                 return line;
               }).join('\n');
-              // 优先使用完整结果作为详情
-              const fullResults = observations.map(o => {
+              // 生成可读文本详情
+              const detailLines: string[] = [];
+              for (const o of observations) {
+                detailLines.push(`▸ 工具: ${o.tool}`);
+                if (o.findings_count !== undefined) detailLines.push(`  发现漏洞: ${o.findings_count} 个`);
+                if (o.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${o.iocs_count} 个`);
+                if (o.results_count !== undefined) detailLines.push(`  结果数: ${o.results_count} 条`);
+                if (o.techniques_count !== undefined) detailLines.push(`  ATT&CK 技术: ${o.techniques_count} 项`);
+                if (o.matches_count !== undefined) detailLines.push(`  YARA 匹配: ${o.matches_count} 条`);
                 const resultData = o.result_full || o.result_preview;
-                try {
-                  const parsed = JSON.parse(resultData);
-                  return { tool: o.tool, result: parsed };
-                } catch {
-                  return { tool: o.tool, result: resultData };
+                if (resultData) {
+                  try {
+                    const parsed = JSON.parse(resultData);
+                    if (parsed.message) detailLines.push(`  消息: ${parsed.message}`);
+                    if (parsed.status) detailLines.push(`  状态: ${parsed.status}`);
+                    if (parsed.summary) detailLines.push(`  摘要: ${parsed.summary}`);
+                    if (parsed.findings && Array.isArray(parsed.findings)) {
+                      detailLines.push(`  漏洞列表:`);
+                      for (const f of parsed.findings.slice(0, 5)) {
+                        detailLines.push(`    - ${f.rule_id || f.type || '未知'}: ${f.description || f.message || ''}`);
+                      }
+                      if (parsed.findings.length > 5) detailLines.push(`    ... 共 ${parsed.findings.length} 条`);
+                    }
+                    if (parsed.iocs && Array.isArray(parsed.iocs)) {
+                      detailLines.push(`  IOC 列表:`);
+                      for (const i of parsed.iocs.slice(0, 5)) {
+                        detailLines.push(`    - ${i.type || '未知'}: ${i.value || i}`);
+                      }
+                      if (parsed.iocs.length > 5) detailLines.push(`    ... 共 ${parsed.iocs.length} 条`);
+                    }
+                    if (parsed.techniques && Array.isArray(parsed.techniques)) {
+                      detailLines.push(`  ATT&CK 技术:`);
+                      for (const t of parsed.techniques.slice(0, 5)) {
+                        detailLines.push(`    - ${t.id || '未知'}: ${t.name || ''}`);
+                      }
+                      if (parsed.techniques.length > 5) detailLines.push(`    ... 共 ${parsed.techniques.length} 条`);
+                    }
+                    if (parsed.matches && Array.isArray(parsed.matches)) {
+                      detailLines.push(`  YARA 匹配:`);
+                      for (const m of parsed.matches.slice(0, 5)) {
+                        detailLines.push(`    - ${m.rule || '未知规则'}: ${m.description || ''}`);
+                      }
+                      if (parsed.matches.length > 5) detailLines.push(`    ... 共 ${parsed.matches.length} 条`);
+                    }
+                  } catch {
+                    const preview = resultData.length > 200 ? resultData.slice(0, 200) + '...' : resultData;
+                    detailLines.push(`  结果: ${preview}`);
+                  }
                 }
-              });
-              detail = JSON.stringify(fullResults, null, 2);
+              }
+              detail = detailLines.join('\n');
             } else {
               content = '获取工具返回结果';
             }
