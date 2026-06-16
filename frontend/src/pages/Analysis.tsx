@@ -99,6 +99,104 @@ const typeLabels: Record<string, string> = {
   malware_analysis: '恶意代码分析',
 };
 
+// ─── Tool name / message cleanup ────────────────────
+/** 清理工具名中的路径前缀，如 "semgrep/bandit" → "bandit" */
+function cleanToolName(name: string): string {
+  const parts = name.split('/');
+  return parts[parts.length - 1];
+}
+
+/** 清理消息文本中的工具路径引用，如 "semgrep/bandit" → "bandit" */
+function cleanMessageText(text: string): string {
+  return text.replace(/\b[\w-]+\/([\w-]+)\b/g, '$1');
+}
+
+// ─── Recursive JSON formatter ───────────────────────
+/**
+ * 递归格式化 JSON 数据为可读文本，提取所有嵌套 JSON 对象，
+ * 每一类数据换行展示，不显示原始 JSON 格式
+ */
+function formatJsonRecursive(
+  data: unknown,
+  indent = 0,
+  prefix = '',
+): string {
+  const pad = '  '.repeat(indent);
+
+  if (data === null || data === undefined) return '';
+
+  if (typeof data !== 'object') {
+    return `${pad}${prefix}${String(data)}`;
+  }
+
+  const lines: string[] = [];
+
+  if (Array.isArray(data)) {
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+        const objLines = formatJsonRecursive(item, indent, `${prefix}▸ [${i + 1}] `);
+        lines.push(objLines);
+      } else {
+        lines.push(`${pad}${prefix}[${i + 1}] ${String(item)}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  const obj = data as Record<string, unknown>;
+  for (const [key, val] of Object.entries(obj)) {
+    const label = prefix ? `${prefix}${key}: ` : `${key}: `;
+
+    if (val === null || val === undefined) {
+      lines.push(`${pad}${label}-`);
+    } else if (typeof val === 'string') {
+      // 短字符串直接显示
+      if (val.length < 80 && !val.includes('{')) {
+        lines.push(`${pad}${label}${val}`);
+      } else if (val.includes('{')) {
+        // 字符串中包含嵌套 JSON，递归解析
+        try {
+          const innerStart = val.indexOf('{');
+          const innerEnd = val.lastIndexOf('}') + 1;
+          if (innerStart >= 0 && innerEnd > innerStart) {
+            const before = val.slice(0, innerStart).trim();
+            const jsonPart = val.slice(innerStart, innerEnd);
+            const after = val.slice(innerEnd).trim();
+            const parsed = JSON.parse(jsonPart);
+            if (before) lines.push(`${pad}${label}${before}`);
+            lines.push(formatJsonRecursive(parsed, indent + 1));
+            if (after) lines.push(`${pad}${after}`);
+          } else {
+            const truncated = val.length > 200 ? val.slice(0, 200) + '...' : val;
+            lines.push(`${pad}${label}${truncated}`);
+          }
+        } catch {
+          const truncated = val.length > 200 ? val.slice(0, 200) + '...' : val;
+          lines.push(`${pad}${label}${truncated}`);
+        }
+      } else {
+        const truncated = val.length > 200 ? val.slice(0, 200) + '...' : val;
+        lines.push(`${pad}${label}${truncated}`);
+      }
+    } else if (typeof val === 'object') {
+      if (Array.isArray(val) && val.length > 0) {
+        lines.push(`${pad}${label}`);
+        lines.push(formatJsonRecursive(val, indent + 1));
+      } else if (Object.keys(val as object).length > 0) {
+        lines.push(`${pad}${label}`);
+        lines.push(formatJsonRecursive(val, indent + 1));
+      } else {
+        lines.push(`${pad}${label}{}`);
+      }
+    } else {
+      lines.push(`${pad}${label}${String(val)}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
 // ─── Shared step parser ─────────────────────────────
 /**
  * 将后端存储的原始 step 数据（JSON 字符串）解析为 DisplayStep
@@ -144,20 +242,22 @@ function parseStepFromRaw(
         }> | undefined;
         if (results && results.length > 0) {
           content = results.map(r => {
-            let line = `${r.name}(${r.ok ? '成功' : '失败'})`;
+            const displayName = cleanToolName(r.name);
+            let line = `${displayName}(${r.ok ? '成功' : '失败'})`;
             if (r.findings_count !== undefined) line += ` - 发现 ${r.findings_count} 个漏洞`;
             else if (r.iocs_count !== undefined) line += ` - 提取 ${r.iocs_count} 个 IOC`;
             else if (r.results_count !== undefined) line += ` - ${r.results_count} 条结果`;
             else if (r.techniques_count !== undefined) line += ` - ${r.techniques_count} 项技术`;
             else if (r.matches_count !== undefined) line += ` - ${r.matches_count} 条匹配`;
-            else if (r.message) line += ` - ${r.message}`;
-            else if (r.error) line += ` - 错误: ${r.error}`;
+            else if (r.message) line += ` - ${cleanMessageText(r.message)}`;
+            else if (r.error) line += ` - 错误: ${cleanMessageText(r.error)}`;
             return line;
           }).join(', ');
-          // 生成可读文本详情，而非原始 JSON
+          // 使用递归 JSON 格式化生成详情
           const detailLines: string[] = [];
           for (const r of results) {
-            detailLines.push(`▸ 工具: ${r.name}  [${r.ok ? '成功' : '失败'}]`);
+            const displayName = cleanToolName(r.name);
+            detailLines.push(`▸ 工具: ${displayName}  [${r.ok ? '成功' : '失败'}]`);
             // 显示参数摘要（跳过 code 等超长字段）
             if (r.args) {
               for (const [key, val] of Object.entries(r.args)) {
@@ -170,13 +270,27 @@ function parseStepFromRaw(
               }
             }
             if (r.status && r.status !== 'ok') detailLines.push(`  状态: ${r.status}`);
-            if (r.message) detailLines.push(`  消息: ${r.message}`);
-            if (r.error) detailLines.push(`  错误: ${r.error}`);
+            if (r.message) detailLines.push(`  消息: ${cleanMessageText(r.message)}`);
+            if (r.error) detailLines.push(`  错误: ${cleanMessageText(r.error)}`);
             if (r.findings_count !== undefined) detailLines.push(`  发现漏洞: ${r.findings_count} 个`);
             if (r.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${r.iocs_count} 个`);
             if (r.results_count !== undefined) detailLines.push(`  结果数: ${r.results_count} 条`);
             if (r.techniques_count !== undefined) detailLines.push(`  ATT&CK 技术: ${r.techniques_count} 项`);
             if (r.matches_count !== undefined) detailLines.push(`  YARA 匹配: ${r.matches_count} 条`);
+
+            // 递归格式化 result_preview / result_full 中的嵌套 JSON
+            const resultData = r.result_preview;
+            if (resultData) {
+              try {
+                const parsedResult = JSON.parse(resultData);
+                const formatted = formatJsonRecursive(parsedResult, 1);
+                if (formatted) detailLines.push(`  结果详情:\n${formatted}`);
+              } catch {
+                // 非 JSON，直接显示
+                const truncated = resultData.length > 200 ? resultData.slice(0, 200) + '...' : resultData;
+                detailLines.push(`  结果: ${cleanMessageText(truncated)}`);
+              }
+            }
           }
           detail = detailLines.join('\n');
         } else {
@@ -198,7 +312,8 @@ function parseStepFromRaw(
         }> | undefined;
         if (observations && observations.length > 0) {
           content = observations.map(o => {
-            let line = `${o.tool}`;
+            const displayName = cleanToolName(o.tool);
+            let line = `${displayName}`;
             if (o.findings_count !== undefined) line += `: 发现 ${o.findings_count} 个漏洞`;
             else if (o.iocs_count !== undefined) line += `: 提取 ${o.iocs_count} 个 IOC`;
             else if (o.results_count !== undefined) line += `: ${o.results_count} 条结果`;
@@ -213,67 +328,30 @@ function parseStepFromRaw(
               } catch {
                 // 非 JSON，直接使用
               }
-              line += `: ${preview}`;
+              line += `: ${cleanMessageText(preview)}`;
             }
             return line;
           }).join('\n');
-          // 生成可读文本详情，而非原始 JSON
+          // 使用递归 JSON 格式化生成详情
           const detailLines: string[] = [];
           for (const o of observations) {
-            detailLines.push(`▸ 工具: ${o.tool}`);
+            const displayName = cleanToolName(o.tool);
+            detailLines.push(`▸ 工具: ${displayName}`);
             if (o.findings_count !== undefined) detailLines.push(`  发现漏洞: ${o.findings_count} 个`);
             if (o.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${o.iocs_count} 个`);
             if (o.results_count !== undefined) detailLines.push(`  结果数: ${o.results_count} 条`);
             if (o.techniques_count !== undefined) detailLines.push(`  ATT&CK 技术: ${o.techniques_count} 项`);
             if (o.matches_count !== undefined) detailLines.push(`  YARA 匹配: ${o.matches_count} 条`);
-            // 解析 result_preview/result_full 中的可读信息
+            // 递归格式化 result_preview/result_full
             const resultData = o.result_full || o.result_preview;
             if (resultData) {
               try {
                 const parsed = JSON.parse(resultData);
-                if (parsed.message) detailLines.push(`  消息: ${parsed.message}`);
-                if (parsed.status) detailLines.push(`  状态: ${parsed.status}`);
-                if (parsed.summary) detailLines.push(`  摘要: ${parsed.summary}`);
-                if (parsed.findings && Array.isArray(parsed.findings)) {
-                  detailLines.push(`  漏洞列表:`);
-                  for (const f of parsed.findings.slice(0, 5)) {
-                    detailLines.push(`    - ${f.rule_id || f.type || '未知'}: ${f.description || f.message || ''}`);
-                  }
-                  if (parsed.findings.length > 5) {
-                    detailLines.push(`    ... 共 ${parsed.findings.length} 条`);
-                  }
-                }
-                if (parsed.iocs && Array.isArray(parsed.iocs)) {
-                  detailLines.push(`  IOC 列表:`);
-                  for (const i of parsed.iocs.slice(0, 5)) {
-                    detailLines.push(`    - ${i.type || '未知'}: ${i.value || i}`);
-                  }
-                  if (parsed.iocs.length > 5) {
-                    detailLines.push(`    ... 共 ${parsed.iocs.length} 条`);
-                  }
-                }
-                if (parsed.techniques && Array.isArray(parsed.techniques)) {
-                  detailLines.push(`  ATT&CK 技术:`);
-                  for (const t of parsed.techniques.slice(0, 5)) {
-                    detailLines.push(`    - ${t.id || '未知'}: ${t.name || ''}`);
-                  }
-                  if (parsed.techniques.length > 5) {
-                    detailLines.push(`    ... 共 ${parsed.techniques.length} 条`);
-                  }
-                }
-                if (parsed.matches && Array.isArray(parsed.matches)) {
-                  detailLines.push(`  YARA 匹配:`);
-                  for (const m of parsed.matches.slice(0, 5)) {
-                    detailLines.push(`    - ${m.rule || '未知规则'}: ${m.description || ''}`);
-                  }
-                  if (parsed.matches.length > 5) {
-                    detailLines.push(`    ... 共 ${parsed.matches.length} 条`);
-                  }
-                }
+                const formatted = formatJsonRecursive(parsed, 1);
+                if (formatted) detailLines.push(`  结果详情:\n${formatted}`);
               } catch {
-                // 非 JSON，截断显示
                 const preview = resultData.length > 200 ? resultData.slice(0, 200) + '...' : resultData;
-                detailLines.push(`  结果: ${preview}`);
+                detailLines.push(`  结果: ${cleanMessageText(preview)}`);
               }
             }
           }
@@ -350,20 +428,22 @@ const Analysis = () => {
             const results = data.results as Array<{ name: string; ok: boolean; args?: Record<string, unknown>; findings_count?: number; iocs_count?: number; results_count?: number; techniques_count?: number; matches_count?: number; result_preview?: string; message?: string; status?: string; error?: string }> | undefined;
             if (results && results.length > 0) {
               content = results.map(r => {
-                let line = `${r.name}(${r.ok ? '成功' : '失败'})`;
+                const displayName = cleanToolName(r.name);
+                let line = `${displayName}(${r.ok ? '成功' : '失败'})`;
                 if (r.findings_count !== undefined) line += ` - 发现 ${r.findings_count} 个漏洞`;
                 else if (r.iocs_count !== undefined) line += ` - 提取 ${r.iocs_count} 个 IOC`;
                 else if (r.results_count !== undefined) line += ` - ${r.results_count} 条结果`;
                 else if (r.techniques_count !== undefined) line += ` - ${r.techniques_count} 项技术`;
                 else if (r.matches_count !== undefined) line += ` - ${r.matches_count} 条匹配`;
-                else if (r.message) line += ` - ${r.message}`;
-                else if (r.error) line += ` - 错误: ${r.error}`;
+                else if (r.message) line += ` - ${cleanMessageText(r.message)}`;
+                else if (r.error) line += ` - 错误: ${cleanMessageText(r.error)}`;
                 return line;
               }).join(', ');
-              // 生成可读文本详情
+              // 使用递归 JSON 格式化生成详情
               const detailLines: string[] = [];
               for (const r of results) {
-                detailLines.push(`▸ 工具: ${r.name}  [${r.ok ? '成功' : '失败'}]`);
+                const displayName = cleanToolName(r.name);
+                detailLines.push(`▸ 工具: ${displayName}  [${r.ok ? '成功' : '失败'}]`);
                 if (r.args) {
                   for (const [key, val] of Object.entries(r.args)) {
                     const valStr = String(val);
@@ -375,13 +455,26 @@ const Analysis = () => {
                   }
                 }
                 if (r.status && r.status !== 'ok') detailLines.push(`  状态: ${r.status}`);
-                if (r.message) detailLines.push(`  消息: ${r.message}`);
-                if (r.error) detailLines.push(`  错误: ${r.error}`);
+                if (r.message) detailLines.push(`  消息: ${cleanMessageText(r.message)}`);
+                if (r.error) detailLines.push(`  错误: ${cleanMessageText(r.error)}`);
                 if (r.findings_count !== undefined) detailLines.push(`  发现漏洞: ${r.findings_count} 个`);
                 if (r.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${r.iocs_count} 个`);
                 if (r.results_count !== undefined) detailLines.push(`  结果数: ${r.results_count} 条`);
                 if (r.techniques_count !== undefined) detailLines.push(`  ATT&CK 技术: ${r.techniques_count} 项`);
                 if (r.matches_count !== undefined) detailLines.push(`  YARA 匹配: ${r.matches_count} 条`);
+
+                // 递归格式化 result_preview 中的嵌套 JSON
+                const resultData = r.result_preview;
+                if (resultData) {
+                  try {
+                    const parsedResult = JSON.parse(resultData);
+                    const formatted = formatJsonRecursive(parsedResult, 1);
+                    if (formatted) detailLines.push(`  结果详情:\n${formatted}`);
+                  } catch {
+                    const truncated = resultData.length > 200 ? resultData.slice(0, 200) + '...' : resultData;
+                    detailLines.push(`  结果: ${cleanMessageText(truncated)}`);
+                  }
+                }
               }
               detail = detailLines.join('\n');
             } else {
@@ -394,7 +487,8 @@ const Analysis = () => {
             const observations = data.observations as Array<{ tool: string; result_preview: string; result_full?: string; findings_count?: number; iocs_count?: number; results_count?: number; techniques_count?: number; matches_count?: number }> | undefined;
             if (observations && observations.length > 0) {
               content = observations.map(o => {
-                let line = `${o.tool}`;
+                const displayName = cleanToolName(o.tool);
+                let line = `${displayName}`;
                 if (o.findings_count !== undefined) line += `: 发现 ${o.findings_count} 个漏洞`;
                 else if (o.iocs_count !== undefined) line += `: 提取 ${o.iocs_count} 个 IOC`;
                 else if (o.results_count !== undefined) line += `: ${o.results_count} 条结果`;
@@ -409,14 +503,15 @@ const Analysis = () => {
                   } catch {
                     // 非 JSON，直接使用
                   }
-                  line += `: ${preview}`;
+                  line += `: ${cleanMessageText(preview)}`;
                 }
                 return line;
               }).join('\n');
-              // 生成可读文本详情
+              // 使用递归 JSON 格式化生成详情
               const detailLines: string[] = [];
               for (const o of observations) {
-                detailLines.push(`▸ 工具: ${o.tool}`);
+                const displayName = cleanToolName(o.tool);
+                detailLines.push(`▸ 工具: ${displayName}`);
                 if (o.findings_count !== undefined) detailLines.push(`  发现漏洞: ${o.findings_count} 个`);
                 if (o.iocs_count !== undefined) detailLines.push(`  提取 IOC: ${o.iocs_count} 个`);
                 if (o.results_count !== undefined) detailLines.push(`  结果数: ${o.results_count} 条`);
@@ -426,40 +521,11 @@ const Analysis = () => {
                 if (resultData) {
                   try {
                     const parsed = JSON.parse(resultData);
-                    if (parsed.message) detailLines.push(`  消息: ${parsed.message}`);
-                    if (parsed.status) detailLines.push(`  状态: ${parsed.status}`);
-                    if (parsed.summary) detailLines.push(`  摘要: ${parsed.summary}`);
-                    if (parsed.findings && Array.isArray(parsed.findings)) {
-                      detailLines.push(`  漏洞列表:`);
-                      for (const f of parsed.findings.slice(0, 5)) {
-                        detailLines.push(`    - ${f.rule_id || f.type || '未知'}: ${f.description || f.message || ''}`);
-                      }
-                      if (parsed.findings.length > 5) detailLines.push(`    ... 共 ${parsed.findings.length} 条`);
-                    }
-                    if (parsed.iocs && Array.isArray(parsed.iocs)) {
-                      detailLines.push(`  IOC 列表:`);
-                      for (const i of parsed.iocs.slice(0, 5)) {
-                        detailLines.push(`    - ${i.type || '未知'}: ${i.value || i}`);
-                      }
-                      if (parsed.iocs.length > 5) detailLines.push(`    ... 共 ${parsed.iocs.length} 条`);
-                    }
-                    if (parsed.techniques && Array.isArray(parsed.techniques)) {
-                      detailLines.push(`  ATT&CK 技术:`);
-                      for (const t of parsed.techniques.slice(0, 5)) {
-                        detailLines.push(`    - ${t.id || '未知'}: ${t.name || ''}`);
-                      }
-                      if (parsed.techniques.length > 5) detailLines.push(`    ... 共 ${parsed.techniques.length} 条`);
-                    }
-                    if (parsed.matches && Array.isArray(parsed.matches)) {
-                      detailLines.push(`  YARA 匹配:`);
-                      for (const m of parsed.matches.slice(0, 5)) {
-                        detailLines.push(`    - ${m.rule || '未知规则'}: ${m.description || ''}`);
-                      }
-                      if (parsed.matches.length > 5) detailLines.push(`    ... 共 ${parsed.matches.length} 条`);
-                    }
+                    const formatted = formatJsonRecursive(parsed, 1);
+                    if (formatted) detailLines.push(`  结果详情:\n${formatted}`);
                   } catch {
                     const preview = resultData.length > 200 ? resultData.slice(0, 200) + '...' : resultData;
-                    detailLines.push(`  结果: ${preview}`);
+                    detailLines.push(`  结果: ${cleanMessageText(preview)}`);
                   }
                 }
               }
