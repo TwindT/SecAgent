@@ -999,11 +999,36 @@ class AgentEngine:
                     "error": str(e),
                 })
 
-        # 记录 Action 步骤
-        action_summary = [
-            {"name": r["name"], "ok": r["error"] is None, "args": r.get("arguments", {})}
-            for r in results
-        ]
+        # 记录 Action 步骤（包含工具执行结果摘要）
+        action_summary = []
+        for r in results:
+            entry: dict = {"name": r["name"], "ok": r["error"] is None, "args": r.get("arguments", {})}
+            # 包含工具执行结果摘要，让前端能看到关键信息
+            if r["error"] is None and r.get("result"):
+                result = r["result"]
+                if isinstance(result, dict):
+                    # 提取关键信息
+                    if "findings" in result:
+                        entry["findings_count"] = len(result["findings"])
+                    if "iocs" in result:
+                        entry["iocs_count"] = len(result["iocs"])
+                    if "results" in result:
+                        entry["results_count"] = len(result["results"])
+                    if "status" in result:
+                        entry["status"] = result["status"]
+                    if "techniques" in result:
+                        entry["techniques_count"] = len(result["techniques"])
+                    if "matches" in result:
+                        entry["matches_count"] = len(result["matches"])
+                    if "message" in result:
+                        entry["message"] = str(result["message"])[:200]
+                    # 保留完整结果的 JSON 摘要（截断防止过长）
+                    entry["result_preview"] = json.dumps(result, ensure_ascii=False)[:500]
+                else:
+                    entry["result_preview"] = str(result)[:200]
+            elif r["error"]:
+                entry["error"] = r["error"]
+            action_summary.append(entry)
         self._push_step({
             "step_num": self.step_count,
             "type": "action",
@@ -1047,17 +1072,35 @@ class AgentEngine:
                 "content": observation,
             })
 
-        # 记录 Observe 步骤
-        observe_summary = [
-            {
+        # 记录 Observe 步骤（包含完整工具结果，不只是 preview）
+        observe_summary = []
+        for r in action_results:
+            result_data = r.get("result", {})
+            error = r.get("error")
+            entry = {
                 "tool": r["name"],
                 "result_preview": (
-                    json.dumps(r.get("result", {}), ensure_ascii=False)[:200]
-                    if r["error"] is None else f"ERROR: {r['error']}"
+                    json.dumps(result_data, ensure_ascii=False)[:200]
+                    if error is None else f"ERROR: {error}"
                 ),
             }
-            for r in action_results
-        ]
+            # 包含完整结果（截断到合理长度）
+            if error is None and result_data:
+                full_result = json.dumps(result_data, ensure_ascii=False)
+                entry["result_full"] = full_result[:2000]  # 完整结果，最多2000字符
+                # 提取关键摘要信息
+                if isinstance(result_data, dict):
+                    if "findings" in result_data:
+                        entry["findings_count"] = len(result_data["findings"])
+                    if "iocs" in result_data:
+                        entry["iocs_count"] = len(result_data["iocs"])
+                    if "results" in result_data:
+                        entry["results_count"] = len(result_data["results"])
+                    if "techniques" in result_data:
+                        entry["techniques_count"] = len(result_data["techniques"])
+                    if "matches" in result_data:
+                        entry["matches_count"] = len(result_data["matches"])
+            observe_summary.append(entry)
         self._push_step({
             "step_num": self.step_count,
             "type": "observation",

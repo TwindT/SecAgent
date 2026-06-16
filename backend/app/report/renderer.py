@@ -50,17 +50,91 @@ def _load_template(name: str) -> str:
 
 
 def _parse_result(result_json: str | None) -> dict:
-    """将 result_json 字符串解析为 dict，兼容多种格式。"""
+    """将 result_json 字符串解析为 dict，兼容多种格式。
+
+    引擎返回的 result_json 结构：
+    {
+        "task_type": "...",
+        "result": "LLM原始输出（可能包含JSON）",
+        "aggregated": { "summary": {...}, "key_findings": [...] },
+        "confidence": { "level": "...", "score": ... },
+        ...
+    }
+    需要从 result 中提取 LLM 的 JSON 报告，并与 aggregated 合并。
+    """
     if not result_json:
         return {}
     try:
-        return json.loads(result_json)
+        raw = json.loads(result_json)
     except (json.JSONDecodeError, TypeError):
         try:
             import ast
-            return ast.literal_eval(result_json)
+            raw = ast.literal_eval(result_json)
         except (ValueError, SyntaxError):
             return {"raw": result_json}
+
+    if not isinstance(raw, dict):
+        return {"raw": result_json}
+
+    # 尝试从 result 字段中提取 LLM 输出的 JSON 报告
+    extracted_report = None
+    result_text = raw.get("result", "")
+    if result_text and isinstance(result_text, str):
+        # 尝试从 ```json ... ``` 代码块中提取
+        import re
+        json_block_match = re.search(r'```json\s*([\s\S]*?)```', result_text)
+        if json_block_match:
+            try:
+                extracted_report = json.loads(json_block_match.group(1).strip())
+            except (json.JSONDecodeError, TypeError):
+                pass
+        # 如果没有 JSON 块，尝试直接解析
+        if not extracted_report:
+            try:
+                extracted_report = json.loads(result_text)
+            except (json.JSONDecodeError, TypeError):
+                pass
+    elif result_text and isinstance(result_text, dict):
+        extracted_report = result_text
+
+    # 合并提取的报告和原始数据
+    merged = {**raw}
+    if extracted_report and isinstance(extracted_report, dict):
+        for key, value in extracted_report.items():
+            if value is not None and value != "":
+                merged[key] = value
+
+    # 如果没有 findings/vulnerabilities 但有 aggregated.key_findings，从聚合数据构建
+    if not merged.get("findings") and not merged.get("vulnerabilities") and raw.get("aggregated", {}).get("key_findings"):
+        findings = raw["aggregated"]["key_findings"]
+        if isinstance(findings, list) and findings:
+            # 漏洞检测：findings 是数组
+            vuln_findings = [f for f in findings if isinstance(f, dict) and f.get("source") in ("scan_code", "query_cwe", "query_cve")]
+            if vuln_findings:
+                merged["findings"] = vuln_findings
+        elif isinstance(findings, dict):
+            # 恶意分析：findings 是对象
+            if findings.get("iocs"):
+                merged["iocs"] = findings["iocs"]
+            if findings.get("attack_techniques"):
+                merged["attack_mapping"] = findings["attack_techniques"]
+            if findings.get("yara_matches"):
+                merged["yara_matches"] = findings["yara_matches"]
+            if findings.get("file_features"):
+                merged["file_info"] = findings["file_features"]
+
+    # 如果没有 summary，从 aggregated.summary 构建
+    if not merged.get("summary") and raw.get("aggregated", {}).get("summary"):
+        merged["summary"] = raw["aggregated"]["summary"]
+
+    # 确保置信度信息在顶层
+    if raw.get("confidence") and not merged.get("summary", {}).get("confidence"):
+        if isinstance(merged.get("summary"), dict):
+            merged["summary"]["confidence"] = raw["confidence"]
+        else:
+            merged["confidence"] = raw["confidence"]
+
+    return merged
 
 
 def _fmt_table(headers: list[str], rows: list[list[str]]) -> str:

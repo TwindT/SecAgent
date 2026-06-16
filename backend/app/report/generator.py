@@ -57,14 +57,64 @@ def _build_styles():
 
 
 def _parse_result(result_json: str) -> dict:
-    """安全解析 result_json 字符串为 dict。"""
+    """安全解析 result_json 字符串为 dict，兼容引擎返回的嵌套结构。"""
     try:
-        return json.loads(result_json.replace("'", '"')) if result_json else {}
+        raw = json.loads(result_json) if result_json else {}
     except (json.JSONDecodeError, TypeError):
         try:
             return ast.literal_eval(result_json) if result_json else {}
         except (ValueError, SyntaxError):
             return {"raw": result_json}
+
+    if not isinstance(raw, dict):
+        return {"raw": result_json}
+
+    # 尝试从 result 字段中提取 LLM 输出的 JSON 报告
+    extracted_report = None
+    result_text = raw.get("result", "")
+    if result_text and isinstance(result_text, str):
+        import re
+        json_block_match = re.search(r'```json\s*([\s\S]*?)```', result_text)
+        if json_block_match:
+            try:
+                extracted_report = json.loads(json_block_match.group(1).strip())
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not extracted_report:
+            try:
+                extracted_report = json.loads(result_text)
+            except (json.JSONDecodeError, TypeError):
+                pass
+    elif result_text and isinstance(result_text, dict):
+        extracted_report = result_text
+
+    # 合并提取的报告和原始数据
+    merged = {**raw}
+    if extracted_report and isinstance(extracted_report, dict):
+        for key, value in extracted_report.items():
+            if value is not None and value != "":
+                merged[key] = value
+
+    # 如果没有 findings/vulnerabilities 但有 aggregated.key_findings，从聚合数据构建
+    if not merged.get("findings") and not merged.get("vulnerabilities") and raw.get("aggregated", {}).get("key_findings"):
+        findings = raw["aggregated"]["key_findings"]
+        if isinstance(findings, list) and findings:
+            vuln_findings = [f for f in findings if isinstance(f, dict) and f.get("source") in ("scan_code", "query_cwe", "query_cve")]
+            if vuln_findings:
+                merged["findings"] = vuln_findings
+        elif isinstance(findings, dict):
+            if findings.get("iocs"):
+                merged["iocs"] = findings["iocs"]
+            if findings.get("attack_techniques"):
+                merged["attack_mapping"] = findings["attack_techniques"]
+            if findings.get("yara_matches"):
+                merged["yara_matches"] = findings["yara_matches"]
+
+    # 如果没有 summary，从 aggregated.summary 构建
+    if not merged.get("summary") and raw.get("aggregated", {}).get("summary"):
+        merged["summary"] = raw["aggregated"]["summary"]
+
+    return merged
 
 
 def _build_info_section(task, styles):

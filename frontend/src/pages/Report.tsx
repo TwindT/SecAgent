@@ -552,6 +552,18 @@ interface ParsedResult {
   ATTACK_TECHNIQUES?: ParsedAttackTechnique[]
   SUMMARY?: string
   rawAnalysis?: string
+  // 后端引擎返回的置信度和严重等级
+  confidence?: { level: string; score: number }
+  severity?: string
+  aggregated?: {
+    summary?: {
+      scan_findings_count?: number
+      total_findings?: number
+      high_risk_count?: number
+      medium_risk_count?: number
+      low_risk_count?: number
+    }
+  }
   // Malware analysis fields
   analysis_type?: string
   verdict?: ParsedVerdict
@@ -766,7 +778,122 @@ const Report = () => {
   const resultData = useMemo<ParsedResult | null>(() => {
     if (!task?.result_json) return null
     try {
-      return JSON.parse(task.result_json) as ParsedResult
+      const raw = JSON.parse(task.result_json)
+
+      // 尝试从 result 字段中提取 LLM 输出的 JSON 报告
+      let extractedReport: Record<string, unknown> | null = null
+      if (raw.result && typeof raw.result === 'string') {
+        // 尝试从 LLM 输出中提取 JSON 块
+        const jsonBlockMatch = raw.result.match(/```json\s*([\s\S]*?)```/)
+        if (jsonBlockMatch) {
+          try {
+            extractedReport = JSON.parse(jsonBlockMatch[1].trim())
+          } catch { /* ignore */ }
+        }
+        // 如果没有 JSON 块，尝试直接解析整个 result
+        if (!extractedReport) {
+          try {
+            extractedReport = JSON.parse(raw.result)
+          } catch { /* ignore */ }
+        }
+      } else if (raw.result && typeof raw.result === 'object') {
+        extractedReport = raw.result
+      }
+
+      // 合并：LLM 提取的报告 + 引擎结构化数据
+      const merged: Record<string, unknown> = { ...raw }
+
+      if (extractedReport) {
+        // 将提取的报告字段合并到顶层
+        for (const [key, value] of Object.entries(extractedReport)) {
+          if (value !== undefined && value !== null) {
+            (merged as any)[key] = value
+          }
+        }
+      }
+
+      // 如果没有 VULNERABILITIES 但有 aggregated.key_findings，从聚合数据构建
+      if (!merged.VULNERABILITIES && raw.aggregated?.key_findings) {
+        const findings = raw.aggregated.key_findings
+        if (Array.isArray(findings) && findings.length > 0) {
+          // 检查是否是漏洞检测的 findings（数组）
+          const vulnFindings = findings.filter(
+            (f: any) => f.source === 'scan_code' || f.source === 'query_cwe' || f.source === 'query_cve'
+          )
+          if (vulnFindings.length > 0) {
+            merged.VULNERABILITIES = vulnFindings.map((f: any) => ({
+              title: f.message || f.cwe_name || f.name || `安全发现 (${f.source})`,
+              severity: f.severity || 'info',
+              cwe: f.cwe || f.cwe_id || '',
+              location: f.rule_id || '--',
+              description: f.description || f.message || f.mitigation || '',
+              codeSnippet: '',
+              fixSuggestion: f.mitigation || '',
+            }))
+          }
+
+          // 检查是否是恶意分析的 findings（对象结构）
+          if (!Array.isArray(findings) && typeof findings === 'object') {
+            const mf = findings as Record<string, unknown>
+            if (mf.file_features || mf.iocs || mf.attack_techniques || mf.yara_matches) {
+              // 构建恶意分析报告数据
+              if (mf.iocs && Array.isArray(mf.iocs)) {
+                merged.iocs = mf.iocs
+              }
+              if (mf.attack_techniques && Array.isArray(mf.attack_techniques)) {
+                merged.attack_matrix = mf.attack_techniques.map((t: any) => ({
+                  technique_id: t.id || '',
+                  technique_name: t.name || '',
+                  tactic: t.tactic || '',
+                }))
+              }
+              if (mf.yara_matches && Array.isArray(mf.yara_matches)) {
+                merged.yara_matches = mf.yara_matches
+              }
+            }
+          }
+        }
+      }
+
+      // 如果没有 ATTACK_TECHNIQUES 但有聚合数据中的 attack_techniques
+      if (!merged.ATTACK_TECHNIQUES && raw.aggregated?.key_findings) {
+        const findings = raw.aggregated.key_findings
+        if (typeof findings === 'object' && !Array.isArray(findings) && findings.attack_techniques) {
+          merged.ATTACK_TECHNIQUES = findings.attack_techniques.map((t: any) => ({
+            id: t.id || '',
+            name: t.name || '',
+            tactic: t.tactic || '',
+          }))
+        }
+      }
+
+      // 如果没有 SUMMARY，从 aggregated 或 result 中提取
+      if (!merged.SUMMARY) {
+        if (raw.aggregated?.summary) {
+          const s = raw.aggregated.summary
+          const parts: string[] = []
+          if (s.total_tool_calls) parts.push(`共调用 ${s.total_tool_calls} 次工具`)
+          if (s.total_findings) parts.push(`发现 ${s.total_findings} 个安全问题`)
+          if (s.high_risk_count) parts.push(`高危 ${s.high_risk_count} 个`)
+          if (s.medium_risk_count) parts.push(`中危 ${s.medium_risk_count} 个`)
+          if (s.low_risk_count) parts.push(`低危 ${s.low_risk_count} 个`)
+          if (s.iocs_count) parts.push(`提取 ${s.iocs_count} 个 IOC`)
+          if (s.attack_techniques_count) parts.push(`${s.attack_techniques_count} 项 ATT&CK 技术`)
+          if (s.yara_matches_count) parts.push(`${s.yara_matches_count} 条 YARA 匹配`)
+          if (parts.length > 0) {
+            merged.SUMMARY = parts.join('，') + '。'
+          }
+        }
+        // 尝试从 result 文本中提取 SUMMARY
+        if (!merged.SUMMARY && raw.result && typeof raw.result === 'string') {
+          const summaryMatch = raw.result.match(/(?:SUMMARY|总结|概述)[：:]\s*([\s\S]*?)(?=\n\n|\n[A-Z_]+[：:]|$)/i)
+          if (summaryMatch) {
+            merged.SUMMARY = summaryMatch[1].trim()
+          }
+        }
+      }
+
+      return merged as ParsedResult
     } catch {
       return null
     }
@@ -813,12 +940,12 @@ const Report = () => {
     if (!resultData.verdict && !resultData.analysis_type && !isMalwareAnalysis) return null
     return {
       analysis_type: resultData.analysis_type || 'malware_analysis',
-      verdict: resultData.verdict || { maliciousness: 'safe', confidence: 'low', reason: '' },
+      verdict: resultData.verdict || { maliciousness: 'suspicious', confidence: 'low', reason: '基于工具分析结果' },
       behaviors: resultData.behaviors || [],
       iocs: resultData.iocs || [],
       attack_matrix: resultData.attack_matrix || [],
       yara_matches: resultData.yara_matches || [],
-      overall_assessment: resultData.overall_assessment || '',
+      overall_assessment: resultData.overall_assessment || resultData.SUMMARY || '',
       recommendations: resultData.recommendations || [],
     }
   }, [resultData, isMalwareAnalysis])
@@ -917,11 +1044,11 @@ const Report = () => {
 
   const vulnCount = resultData?.aggregated?.summary?.scan_findings_count
     || resultData?.aggregated?.summary?.total_findings
-    || (resultData?.aggregated?.summary?.high_risk_count + resultData?.aggregated?.summary?.medium_risk_count + resultData?.aggregated?.summary?.low_risk_count)
+    || ((resultData?.aggregated?.summary?.high_risk_count ?? 0) + (resultData?.aggregated?.summary?.medium_risk_count ?? 0) + (resultData?.aggregated?.summary?.low_risk_count ?? 0))
     || vulnerabilities.length
   const typeLabel = taskTypeLabels[task?.type || ''] || task?.type || '未知类型'
 
-  // ─── 5.1-1: Target file/code name ────────────────
+  // ─── 5.1-1: Target file/code name ──────────────── 
   const targetName = useMemo(() => {
     if (task?.input_path) {
       // Extract filename from path

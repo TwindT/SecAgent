@@ -13,7 +13,7 @@ import {
   Loader2,
   ArrowRight,
 } from 'lucide-react';
-import { getTask } from '@/services/api';
+import { getTask, getTaskSteps } from '@/services/api';
 import type { TaskResponse, AnalysisStep } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import type { WSMessage } from '@/hooks/useWebSocket';
@@ -141,9 +141,20 @@ const Analysis = () => {
             break;
           case 'action': {
             title = '执行操作';
-            const results = data.results as Array<{ name: string; ok: boolean; args?: Record<string, unknown> }> | undefined;
+            const results = data.results as Array<{ name: string; ok: boolean; args?: Record<string, unknown>; findings_count?: number; iocs_count?: number; results_count?: number; techniques_count?: number; matches_count?: number; result_preview?: string; message?: string; status?: string; error?: string }> | undefined;
             if (results && results.length > 0) {
-              content = results.map(r => `${r.name}(${r.ok ? '成功' : '失败'})`).join(', ');
+              content = results.map(r => {
+                let line = `${r.name}(${r.ok ? '成功' : '失败'})`;
+                // 添加关键摘要
+                if (r.findings_count !== undefined) line += ` - 发现 ${r.findings_count} 个漏洞`;
+                else if (r.iocs_count !== undefined) line += ` - 提取 ${r.iocs_count} 个 IOC`;
+                else if (r.results_count !== undefined) line += ` - ${r.results_count} 条结果`;
+                else if (r.techniques_count !== undefined) line += ` - ${r.techniques_count} 项技术`;
+                else if (r.matches_count !== undefined) line += ` - ${r.matches_count} 条匹配`;
+                else if (r.message) line += ` - ${r.message}`;
+                else if (r.error) line += ` - 错误: ${r.error}`;
+                return line;
+              }).join(', ');
               detail = JSON.stringify(results, null, 2);
             } else {
               content = '执行工具操作';
@@ -152,12 +163,30 @@ const Analysis = () => {
           }
           case 'observation': {
             title = '观察结果';
-            const observations = data.observations as Array<{ tool: string; result_preview: string }> | undefined;
+            const observations = data.observations as Array<{ tool: string; result_preview: string; result_full?: string; findings_count?: number; iocs_count?: number; results_count?: number; techniques_count?: number; matches_count?: number }> | undefined;
             if (observations && observations.length > 0) {
-              content = observations.map(o => `${o.tool}: ${o.result_preview}`).join('\n');
-              if (observations.length > 1 || content.length > 200) {
-                detail = JSON.stringify(observations, null, 2);
-              }
+              content = observations.map(o => {
+                let line = `${o.tool}`;
+                // 添加关键摘要
+                if (o.findings_count !== undefined) line += `: 发现 ${o.findings_count} 个漏洞`;
+                else if (o.iocs_count !== undefined) line += `: 提取 ${o.iocs_count} 个 IOC`;
+                else if (o.results_count !== undefined) line += `: ${o.results_count} 条结果`;
+                else if (o.techniques_count !== undefined) line += `: ${o.techniques_count} 项 ATT&CK 技术`;
+                else if (o.matches_count !== undefined) line += `: ${o.matches_count} 条 YARA 匹配`;
+                else line += `: ${o.result_preview}`;
+                return line;
+              }).join('\n');
+              // 优先使用完整结果作为详情
+              const fullResults = observations.map(o => {
+                const resultData = o.result_full || o.result_preview;
+                try {
+                  const parsed = JSON.parse(resultData);
+                  return { tool: o.tool, result: parsed };
+                } catch {
+                  return { tool: o.tool, result: resultData };
+                }
+              });
+              detail = JSON.stringify(fullResults, null, 2);
             } else {
               content = '获取工具返回结果';
             }
@@ -389,12 +418,6 @@ const Analysis = () => {
           }
         }
 
-        // If task is still pending/analyzing, poll for updates
-        if ((task.status === 'pending' || task.status === 'analyzing') && !triggeredRef.current) {
-          triggeredRef.current = true;
-          // Analysis is auto-triggered on task creation; just poll for step updates
-        }
-
         // If task is already done/failed, stop analyzing and clear active task
         if (task.status === 'done' || task.status === 'failed') {
           setIsAnalyzing(false);
@@ -414,6 +437,129 @@ const Analysis = () => {
       cancelled = true;
     };
   }, [taskId]);
+
+  // ── 轮询补偿：当任务处于 analyzing 状态时，定期从 HTTP API 获取步骤 ──
+  // 解决 WebSocket 连接延迟导致消息丢失的问题
+  useEffect(() => {
+    if (!taskId || !isAnalyzing) return;
+
+    const POLL_INTERVAL = 2000; // 每 2 秒轮询一次
+    let pollTimer: ReturnType<typeof setInterval>;
+
+    async function pollSteps() {
+      try {
+        // 先获取任务状态
+        const taskRes = await getTask(Number(taskId));
+        const task = taskRes.data;
+
+        // 获取最新步骤
+        const stepsRes = await getTaskSteps(Number(taskId));
+        const apiSteps: AnalysisStep[] = stepsRes.data;
+
+        if (apiSteps && apiSteps.length > 0) {
+          // 将 API 步骤转换为 DisplayStep 并补充到 steps 中
+          const newDisplaySteps: DisplayStep[] = apiSteps.map((step: AnalysisStep) => {
+            let stepType: StepType = 'thought';
+            let stepTitle = '';
+            let stepContent = '';
+            let stepDetail: string | undefined;
+
+            if (step.thought) {
+              stepType = 'thought';
+              stepTitle = '思考';
+              try {
+                const parsed = JSON.parse(step.thought);
+                stepContent = parsed.content || step.thought;
+                if (parsed.tool_calls_requested && parsed.tool_calls_requested.length > 0) {
+                  stepDetail = `请求工具: ${parsed.tool_calls_requested.join(', ')}`;
+                }
+              } catch {
+                stepContent = step.thought;
+              }
+            } else if (step.action) {
+              stepType = 'action';
+              stepTitle = '执行操作';
+              try {
+                const parsed = JSON.parse(step.action);
+                const results = parsed.results as Array<{ name: string; ok: boolean; args?: Record<string, unknown> }> | undefined;
+                if (results && results.length > 0) {
+                  stepContent = results.map(r => `${r.name}(${r.ok ? '成功' : '失败'})`).join(', ');
+                  stepDetail = JSON.stringify(results, null, 2);
+                } else {
+                  stepContent = step.action;
+                }
+              } catch {
+                stepContent = step.action;
+              }
+            } else if (step.observation) {
+              stepType = 'observation';
+              stepTitle = '观察结果';
+              try {
+                const parsed = JSON.parse(step.observation);
+                const observations = parsed.observations as Array<{ tool: string; result_preview: string }> | undefined;
+                if (observations && observations.length > 0) {
+                  stepContent = observations.map(o => `${o.tool}: ${o.result_preview}`).join('\n');
+                  if (observations.length > 1 || stepContent.length > 200) {
+                    stepDetail = JSON.stringify(observations, null, 2);
+                  }
+                } else {
+                  stepContent = step.observation;
+                }
+              } catch {
+                stepContent = step.observation;
+              }
+            }
+
+            return {
+              id: `step-${step.id}`,
+              type: stepType,
+              title: stepTitle,
+              content: stepContent,
+              detail: stepDetail,
+              timestamp: new Date(step.created_at).toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              }),
+            };
+          });
+
+          setSteps((prev) => {
+            // 合并：保留已有的步骤，补充 API 中新增的步骤
+            const existingIds = new Set(prev.map(s => s.id));
+            const merged = [...prev];
+            for (const ds of newDisplaySteps) {
+              if (!existingIds.has(ds.id)) {
+                merged.push(ds);
+              }
+            }
+            return merged;
+          });
+          setExpandedSteps((prev) => {
+            const newSet = new Set(prev);
+            for (const ds of newDisplaySteps) {
+              newSet.add(ds.id);
+            }
+            return newSet;
+          });
+        }
+
+        // 如果任务完成，停止轮询
+        if (task.status === 'done' || task.status === 'failed') {
+          setIsAnalyzing(false);
+          clearActiveTask();
+        }
+      } catch {
+        // 轮询失败不影响主流程
+      }
+    }
+
+    pollTimer = setInterval(pollSteps, POLL_INTERVAL);
+
+    return () => {
+      clearInterval(pollTimer);
+    };
+  }, [taskId, isAnalyzing]);
 
   const toggleExpand = (stepId: string) => {
     setExpandedSteps((prev) => {
