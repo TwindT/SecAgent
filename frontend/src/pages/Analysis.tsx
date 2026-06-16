@@ -218,7 +218,18 @@ function parseStepFromRaw(
       try {
         const parsed = JSON.parse(rawContent);
         // 当 content 为空时，不显示原始 JSON，由 detail 区域展示关键信息
-        content = parsed.content ?? '';
+        let rawContentStr = parsed.content ?? '';
+        // 如果 content 本身是 JSON 字符串，递归格式化
+        if (typeof rawContentStr === 'string' && rawContentStr.trim().startsWith('{')) {
+          try {
+            const innerParsed = JSON.parse(rawContentStr);
+            content = formatJsonRecursive(innerParsed);
+          } catch {
+            content = rawContentStr;
+          }
+        } else {
+          content = rawContentStr;
+        }
         if (parsed.tool_calls_requested && Array.isArray(parsed.tool_calls_requested) && parsed.tool_calls_requested.length > 0) {
           detail = `请求工具: ${parsed.tool_calls_requested.join(', ')}`;
         }
@@ -357,10 +368,16 @@ function parseStepFromRaw(
           }
           detail = detailLines.join('\n');
         } else {
-          content = rawContent;
+          // 数据不匹配 observations 格式，尝试递归格式化原始 JSON
+          try {
+            const parsed = JSON.parse(rawContent);
+            content = formatJsonRecursive(parsed);
+          } catch {
+            content = rawContent;
+          }
         }
       } catch {
-        content = rawContent;
+        // 非 JSON 字符串，直接使用
       }
       break;
     }
@@ -413,9 +430,26 @@ const Analysis = () => {
         let detail: string | undefined;
 
         switch (msg.type) {
-          case 'thought':
+          case 'thought': {
             title = '思考';
-            content = (data.content as string) ?? '';
+            const rawContent = data.content;
+            if (typeof rawContent === 'object' && rawContent !== null) {
+              content = formatJsonRecursive(rawContent);
+            } else if (typeof rawContent === 'string') {
+              // 如果 content 是 JSON 字符串，递归格式化
+              if (rawContent.trim().startsWith('{')) {
+                try {
+                  const innerParsed = JSON.parse(rawContent);
+                  content = formatJsonRecursive(innerParsed);
+                } catch {
+                  content = rawContent;
+                }
+              } else {
+                content = rawContent;
+              }
+            } else {
+              content = String(rawContent ?? '');
+            }
             if (data.tool_calls_requested && (data.tool_calls_requested as string[]).length > 0) {
               detail = `请求工具: ${(data.tool_calls_requested as string[]).join(', ')}`;
             }
@@ -423,6 +457,7 @@ const Analysis = () => {
               detail = detail ? `${detail}\n结束原因: ${data.finish_reason}` : `结束原因: ${data.finish_reason}`;
             }
             break;
+          }
           case 'action': {
             title = '执行操作';
             const results = data.results as Array<{ name: string; ok: boolean; args?: Record<string, unknown>; findings_count?: number; iocs_count?: number; results_count?: number; techniques_count?: number; matches_count?: number; result_preview?: string; message?: string; status?: string; error?: string }> | undefined;
@@ -531,7 +566,9 @@ const Analysis = () => {
               }
               detail = detailLines.join('\n');
             } else {
-              content = '获取工具返回结果';
+              // 数据不匹配 observations 格式，尝试递归格式化整个 data
+              const formatted = formatJsonRecursive(data);
+              content = formatted || '获取工具返回结果';
             }
             break;
           }
