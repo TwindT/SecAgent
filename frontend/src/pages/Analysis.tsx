@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { getTask, getTaskSteps } from '@/services/api';
 import type { TaskResponse, AnalysisStep } from '@/services/api';
-import { useWebSocket } from '@/hooks/useWebSocket';
+import { useWebSocket, normalizeWSMessage } from '@/hooks/useWebSocket';
 import type { WSMessage } from '@/hooks/useWebSocket';
 
 // ─── Types ──────────────────────────────────────────
@@ -110,14 +110,15 @@ const Analysis = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [taskNotFound, setTaskNotFound] = useState(false);
   const [totalSteps, setTotalSteps] = useState(8);
-  const triggeredRef = useRef(false);
 
   // WebSocket message handler
   const handleWsMessage = useCallback(
     (msg: WSMessage) => {
       if (!taskId) return;
 
-      const data = msg.data;
+      // 规范化消息：解析可能是 JSON 字符串的字段
+      const normalizedMsg = normalizeWSMessage(msg);
+      const data = normalizedMsg.data;
 
       if (msg.type === 'thought' || msg.type === 'action' || msg.type === 'observation' || msg.type === 'done' || msg.type === 'error') {
         // 后端发送 step_num（snake_case），兼容两种格式

@@ -8,6 +8,50 @@ export interface WSMessage {
   data: Record<string, unknown>;
 }
 
+/**
+ * 安全地解析可能是字符串的字段
+ * 如果字段是字符串且看起来像 JSON，则尝试解析
+ */
+function safeParseField(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        // 解析失败，返回原始值
+      }
+    }
+  }
+  return value;
+}
+
+/**
+ * 确保 data 对象中的关键字段被正确解析
+ * 后端可能将 results/observations 等字段序列化为字符串
+ */
+export function normalizeWSMessage(msg: WSMessage): WSMessage {
+  if (!msg.data || typeof msg.data !== 'object') {
+    return msg;
+  }
+
+  const normalizedData: Record<string, unknown> = { ...msg.data };
+
+  // 对可能的 JSON 字符串字段进行解析
+  const jsonFields = ['results', 'observations', 'content', 'detail'];
+  for (const field of jsonFields) {
+    if (field in normalizedData) {
+      normalizedData[field] = safeParseField(normalizedData[field]);
+    }
+  }
+
+  return {
+    ...msg,
+    data: normalizedData,
+  };
+}
+
 export interface UseWebSocketOptions {
   /** 自动重连，默认 true */
   autoReconnect?: boolean;

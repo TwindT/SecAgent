@@ -260,18 +260,15 @@ def chat_with_task(
 
 @router.delete("/{task_id}")
 def delete_task(task_id: int, db: Session = Depends(get_db)):
-    """删除指定任务及其关联的分析步骤和对话记录。"""
+    """删除指定任务及其关联的分析步骤和对话记录。
+
+    利用 ORM cascade="all, delete-orphan" 自动级联删除
+    AnalysisStep 和 Conversation，无需手动逐表删除。
+    """
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
-    # 删除关联的对话记录
-    conv_manager.delete_history(task_id)
-
-    # 删除关联的分析步骤
-    db.query(AnalysisStep).filter(AnalysisStep.task_id == task_id).delete()
-
-    # 删除任务本身
     db.delete(task)
     db.commit()
 
