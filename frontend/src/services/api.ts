@@ -181,9 +181,9 @@ export const sendMessage = (taskId: number, params: SendMessageParams) =>
 export const getConversations = (taskId: number) =>
   apiClient.get<ConversationResponse[]>(`/tasks/${taskId}/conversations`);
 
-/** 下载 PDF 报告 */
+/** 下载 PDF 报告（超时 120 秒，含 LLM 摘要生成） */
 export const downloadPdfReport = (taskId: number) =>
-  apiClient.get(`/tasks/${taskId}/report/pdf`, { responseType: 'blob' });
+  apiClient.get(`/tasks/${taskId}/report/pdf`, { responseType: 'blob', timeout: 120000 });
 
 /** 下载 Markdown 报告 */
 export const downloadMdReport = (taskId: number) =>

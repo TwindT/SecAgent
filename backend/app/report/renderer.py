@@ -1,7 +1,9 @@
 """报告渲染引擎 — 将分析结果 JSON 填入 Markdown 模板"""
 
+import ast
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -68,7 +70,6 @@ def _parse_result(result_json: str | None) -> dict:
         raw = json.loads(result_json)
     except (json.JSONDecodeError, TypeError):
         try:
-            import ast
             raw = ast.literal_eval(result_json)
         except (ValueError, SyntaxError):
             return {"raw": result_json}
@@ -81,7 +82,6 @@ def _parse_result(result_json: str | None) -> dict:
     result_text = raw.get("result", "")
     if result_text and isinstance(result_text, str):
         # 尝试从 ```json ... ``` 代码块中提取
-        import re
         json_block_match = re.search(r'```json\s*([\s\S]*?)```', result_text)
         if json_block_match:
             try:
@@ -338,6 +338,21 @@ def _get_ai_summary(task, result: dict) -> str:
     )
 
 
+def _escape_format_braces(ctx: dict) -> dict:
+    """转义 ctx 值中的花括号，防止 str.format() 将其误认为占位符。
+
+    模板使用 {key} 占位符，而 ctx 值中可能包含代码片段、JSON 示例等
+    含有花括号的内容，必须转义为 {{ 和 }} 以避免 KeyError / IndexError。
+    """
+    escaped = {}
+    for key, value in ctx.items():
+        if isinstance(value, str):
+            escaped[key] = value.replace("{", "{{").replace("}", "}}")
+        else:
+            escaped[key] = value
+    return escaped
+
+
 def render_markdown(task) -> str:
     """根据任务的分析结果渲染 Markdown 报告。
 
@@ -356,5 +371,8 @@ def render_markdown(task) -> str:
     else:
         template = _load_template("malware_report.md")
         ctx = _build_malware_context(task, result)
+
+    # 转义 ctx 值中的花括号，防止与模板占位符冲突
+    ctx = _escape_format_braces(ctx)
 
     return template.format(**ctx)

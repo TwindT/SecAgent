@@ -217,18 +217,28 @@ function parseStepFromRaw(
       title = '思考';
       try {
         const parsed = JSON.parse(rawContent);
-        // 当 content 为空时，不显示原始 JSON，由 detail 区域展示关键信息
         let rawContentStr = parsed.content ?? '';
-        // 如果 content 本身是 JSON 字符串，递归格式化
-        if (typeof rawContentStr === 'string' && rawContentStr.trim().startsWith('{')) {
-          try {
-            const innerParsed = JSON.parse(rawContentStr);
-            content = formatJsonRecursive(innerParsed);
-          } catch {
+        // 处理 markdown 代码块格式：```json { ... } ```
+        if (typeof rawContentStr === 'string') {
+          const jsonMatch = rawContentStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (jsonMatch) {
+            rawContentStr = jsonMatch[1].trim();
+          }
+          // 如果 content 是 JSON 字符串，递归格式化
+          if (rawContentStr.startsWith('{') || rawContentStr.startsWith('[')) {
+            try {
+              const innerParsed = JSON.parse(rawContentStr);
+              content = formatJsonRecursive(innerParsed);
+            } catch {
+              content = rawContentStr;
+            }
+          } else {
             content = rawContentStr;
           }
+        } else if (typeof rawContentStr === 'object' && rawContentStr !== null) {
+          content = formatJsonRecursive(rawContentStr);
         } else {
-          content = rawContentStr;
+          content = String(rawContentStr ?? '');
         }
         if (parsed.tool_calls_requested && Array.isArray(parsed.tool_calls_requested) && parsed.tool_calls_requested.length > 0) {
           detail = `请求工具: ${parsed.tool_calls_requested.join(', ')}`;
@@ -305,10 +315,16 @@ function parseStepFromRaw(
           }
           detail = detailLines.join('\n');
         } else {
-          content = rawContent;
+          // results 为空，尝试递归格式化原始数据
+          try {
+            const parsed = JSON.parse(rawContent);
+            content = formatJsonRecursive(parsed);
+          } catch {
+            content = rawContent;
+          }
         }
       } catch {
-        content = rawContent;
+        // 非 JSON 字符串，直接使用
       }
       break;
     }
@@ -331,11 +347,16 @@ function parseStepFromRaw(
             else if (o.techniques_count !== undefined) line += `: ${o.techniques_count} 项 ATT&CK 技术`;
             else if (o.matches_count !== undefined) line += `: ${o.matches_count} 条 YARA 匹配`;
             else {
-              // 尝试解析 result_preview 中的 JSON，提取 message 等可读字段
+              // 尝试解析 result_preview 中的 JSON，提取可读字段
               let preview = o.result_preview;
               try {
                 const parsed = JSON.parse(preview);
-                preview = parsed.message || parsed.summary || preview;
+                if (parsed.message || parsed.summary) {
+                  preview = parsed.message || parsed.summary;
+                } else {
+                  // 没有 message/summary，递归格式化 JSON
+                  preview = formatJsonRecursive(parsed);
+                }
               } catch {
                 // 非 JSON，直接使用
               }
@@ -368,10 +389,24 @@ function parseStepFromRaw(
           }
           detail = detailLines.join('\n');
         } else {
-          // 数据不匹配 observations 格式，尝试递归格式化原始 JSON
+          // 数据不匹配 observations 数组格式，尝试其他格式
           try {
             const parsed = JSON.parse(rawContent);
-            content = formatJsonRecursive(parsed);
+            // 检查是否是 { toolName: result, ... } 格式
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && !parsed.observations) {
+              const lines: string[] = [];
+              for (const [key, val] of Object.entries(parsed)) {
+                const displayName = cleanToolName(key);
+                if (typeof val === 'object' && val !== null) {
+                  lines.push(`${displayName}: ${formatJsonRecursive(val)}`);
+                } else {
+                  lines.push(`${displayName}: ${String(val)}`);
+                }
+              }
+              content = lines.join('\n');
+            } else {
+              content = formatJsonRecursive(parsed);
+            }
           } catch {
             content = rawContent;
           }
@@ -432,12 +467,17 @@ const Analysis = () => {
         switch (msg.type) {
           case 'thought': {
             title = '思考';
-            const rawContent = data.content;
+            let rawContent = data.content;
             if (typeof rawContent === 'object' && rawContent !== null) {
               content = formatJsonRecursive(rawContent);
             } else if (typeof rawContent === 'string') {
+              // 处理 markdown 代码块格式：```json { ... } ```
+              const jsonMatch = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+              if (jsonMatch) {
+                rawContent = jsonMatch[1].trim();
+              }
               // 如果 content 是 JSON 字符串，递归格式化
-              if (rawContent.trim().startsWith('{')) {
+              if (rawContent.startsWith('{') || rawContent.startsWith('[')) {
                 try {
                   const innerParsed = JSON.parse(rawContent);
                   content = formatJsonRecursive(innerParsed);
@@ -513,7 +553,10 @@ const Analysis = () => {
               }
               detail = detailLines.join('\n');
             } else {
-              content = '执行工具操作';
+              // results 为空，尝试递归格式化原始数据
+              const { step_num, stepNum, ...businessData } = data as Record<string, unknown>;
+              const formatted = formatJsonRecursive(businessData);
+              content = formatted || '执行工具操作';
             }
             break;
           }
@@ -530,11 +573,15 @@ const Analysis = () => {
                 else if (o.techniques_count !== undefined) line += `: ${o.techniques_count} 项 ATT&CK 技术`;
                 else if (o.matches_count !== undefined) line += `: ${o.matches_count} 条 YARA 匹配`;
                 else {
-                  // 尝试解析 result_preview 中的 JSON，提取 message 等可读字段
+                  // 尝试解析 result_preview 中的 JSON，提取可读字段
                   let preview = o.result_preview;
                   try {
                     const parsed = JSON.parse(preview);
-                    preview = parsed.message || parsed.summary || preview;
+                    if (parsed.message || parsed.summary) {
+                      preview = parsed.message || parsed.summary;
+                    } else {
+                      preview = formatJsonRecursive(parsed);
+                    }
                   } catch {
                     // 非 JSON，直接使用
                   }
@@ -566,8 +613,10 @@ const Analysis = () => {
               }
               detail = detailLines.join('\n');
             } else {
-              // 数据不匹配 observations 格式，尝试递归格式化整个 data
-              const formatted = formatJsonRecursive(data);
+              // 数据不匹配 observations 数组格式，尝试 { toolName: result } 格式
+              // 过滤掉内部字段，只展示业务数据
+              const { step_num, stepNum, ...businessData } = data as Record<string, unknown>;
+              const formatted = formatJsonRecursive(businessData);
               content = formatted || '获取工具返回结果';
             }
             break;

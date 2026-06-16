@@ -1,8 +1,6 @@
 """PDF 安全分析报告生成器 — 支持 reportlab 直接生成和 Markdown→HTML→PDF 两种模式"""
 
-import ast
 import io
-import json
 import logging
 from datetime import datetime, timezone
 
@@ -20,107 +18,62 @@ from reportlab.platypus import (
 )
 from xhtml2pdf import pisa
 
-from .renderer import render_markdown
+from .fonts import FONT_NAME, FONT_NAME_BOLD, register_cjk_font, get_font_css_family
+from .renderer import render_markdown, _parse_result
 
 logger = logging.getLogger(__name__)
 
 PAGE_W, PAGE_H = A4
 
+# 模块加载时注册中文字体
+_cjk_available = register_cjk_font()
+
 
 def _build_styles():
-    """构建报告专用样式。"""
+    """构建报告专用样式（使用中文字体）。"""
     base = getSampleStyleSheet()
+    font = FONT_NAME if _cjk_available else "Helvetica"
+    font_bold = FONT_NAME_BOLD if _cjk_available else "Helvetica-Bold"
+
     styles = {
         "title": ParagraphStyle(
-            "ReportTitle", parent=base["Title"], fontSize=22, spaceAfter=6 * mm, textColor=colors.HexColor("#1a1a2e")
+            "ReportTitle", parent=base["Title"], fontName=font_bold,
+            fontSize=22, spaceAfter=6 * mm, textColor=colors.HexColor("#1a1a2e")
         ),
         "h2": ParagraphStyle(
-            "ReportH2", parent=base["Heading2"], fontSize=14, spaceBefore=8 * mm, spaceAfter=4 * mm, textColor=colors.HexColor("#16213e")
+            "ReportH2", parent=base["Heading2"], fontName=font_bold,
+            fontSize=14, spaceBefore=8 * mm, spaceAfter=4 * mm, textColor=colors.HexColor("#16213e")
         ),
         "h3": ParagraphStyle(
-            "ReportH3", parent=base["Heading3"], fontSize=12, spaceBefore=5 * mm, spaceAfter=2 * mm, textColor=colors.HexColor("#0f3460")
+            "ReportH3", parent=base["Heading3"], fontName=font_bold,
+            fontSize=12, spaceBefore=5 * mm, spaceAfter=2 * mm, textColor=colors.HexColor("#0f3460")
         ),
         "body": ParagraphStyle(
-            "ReportBody", parent=base["Normal"], fontSize=10, leading=16, spaceAfter=2 * mm
+            "ReportBody", parent=base["Normal"], fontName=font,
+            fontSize=10, leading=16, spaceAfter=2 * mm
         ),
         "code": ParagraphStyle(
-            "ReportCode", parent=base["Code"], fontSize=8, leading=12, backColor=colors.HexColor("#f4f4f4"), borderPadding=4
+            "ReportCode", parent=base["Code"], fontName="Courier",
+            fontSize=8, leading=12, backColor=colors.HexColor("#f4f4f4"), borderPadding=4
         ),
         "footer": ParagraphStyle(
-            "ReportFooter", parent=base["Normal"], fontSize=8, textColor=colors.gray
+            "ReportFooter", parent=base["Normal"], fontName=font,
+            fontSize=8, textColor=colors.gray
         ),
-        "severity_high": ParagraphStyle("SevHigh", parent=base["Normal"], fontSize=10, textColor=colors.red),
-        "severity_medium": ParagraphStyle("SevMed", parent=base["Normal"], fontSize=10, textColor=colors.orange),
-        "severity_low": ParagraphStyle("SevLow", parent=base["Normal"], fontSize=10, textColor=colors.green),
+        "severity_high": ParagraphStyle("SevHigh", parent=base["Normal"], fontName=font, fontSize=10, textColor=colors.red),
+        "severity_medium": ParagraphStyle("SevMed", parent=base["Normal"], fontName=font, fontSize=10, textColor=colors.orange),
+        "severity_low": ParagraphStyle("SevLow", parent=base["Normal"], fontName=font, fontSize=10, textColor=colors.green),
     }
     return styles
-
-
-def _parse_result(result_json: str) -> dict:
-    """安全解析 result_json 字符串为 dict，兼容引擎返回的嵌套结构。"""
-    try:
-        raw = json.loads(result_json) if result_json else {}
-    except (json.JSONDecodeError, TypeError):
-        try:
-            return ast.literal_eval(result_json) if result_json else {}
-        except (ValueError, SyntaxError):
-            return {"raw": result_json}
-
-    if not isinstance(raw, dict):
-        return {"raw": result_json}
-
-    # 尝试从 result 字段中提取 LLM 输出的 JSON 报告
-    extracted_report = None
-    result_text = raw.get("result", "")
-    if result_text and isinstance(result_text, str):
-        import re
-        json_block_match = re.search(r'```json\s*([\s\S]*?)```', result_text)
-        if json_block_match:
-            try:
-                extracted_report = json.loads(json_block_match.group(1).strip())
-            except (json.JSONDecodeError, TypeError):
-                pass
-        if not extracted_report:
-            try:
-                extracted_report = json.loads(result_text)
-            except (json.JSONDecodeError, TypeError):
-                pass
-    elif result_text and isinstance(result_text, dict):
-        extracted_report = result_text
-
-    # 合并提取的报告和原始数据
-    merged = {**raw}
-    if extracted_report and isinstance(extracted_report, dict):
-        for key, value in extracted_report.items():
-            if value is not None and value != "":
-                merged[key] = value
-
-    # 如果没有 findings/vulnerabilities 但有 aggregated.key_findings，从聚合数据构建
-    if not merged.get("findings") and not merged.get("vulnerabilities") and raw.get("aggregated", {}).get("key_findings"):
-        findings = raw["aggregated"]["key_findings"]
-        if isinstance(findings, list) and findings:
-            vuln_findings = [f for f in findings if isinstance(f, dict) and f.get("source") in ("scan_code", "query_cwe", "query_cve")]
-            if vuln_findings:
-                merged["findings"] = vuln_findings
-        elif isinstance(findings, dict):
-            if findings.get("iocs"):
-                merged["iocs"] = findings["iocs"]
-            if findings.get("attack_techniques"):
-                merged["attack_mapping"] = findings["attack_techniques"]
-            if findings.get("yara_matches"):
-                merged["yara_matches"] = findings["yara_matches"]
-
-    # 如果没有 summary，从 aggregated.summary 构建
-    if not merged.get("summary") and raw.get("aggregated", {}).get("summary"):
-        merged["summary"] = raw["aggregated"]["summary"]
-
-    return merged
 
 
 def _build_info_section(task, styles):
     """基本信息区域。"""
     elements = [Paragraph("安全分析报告", styles["title"])]
     elements.append(Paragraph("基本信息", styles["h2"]))
+
+    font_bold = FONT_NAME_BOLD if _cjk_available else "Helvetica-Bold"
+    font_normal = FONT_NAME if _cjk_available else "Helvetica"
 
     info_data = [
         ["任务 ID", str(task.id)],
@@ -135,8 +88,8 @@ def _build_info_section(task, styles):
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#e8e8e8")),
         ("PADDING", (0, 0), (-1, -1), 6),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+        ("FONTNAME", (0, 0), (0, -1), font_bold),
+        ("FONTNAME", (1, 0), (1, -1), font_normal),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
@@ -227,8 +180,11 @@ def generate_pdf_from_markdown(task) -> bytes:
 
     # Markdown → HTML
     html_body = markdown.markdown(
-        md_text, extensions=["tables", "fenced_code", "codehilite", "toc"]
+        md_text, extensions=["tables", "fenced_code", "toc"]
     )
+
+    # 获取 CSS 字体族声明
+    font_css = get_font_css_family()
 
     # 包装完整 HTML，配置中文字体
     html_full = f"""<!DOCTYPE html>
@@ -237,15 +193,15 @@ def generate_pdf_from_markdown(task) -> bytes:
 <meta charset="utf-8">
 <style>
   @page {{ size: A4; margin: 2cm; }}
-  body {{ font-family: "DejaVu Sans", "Arial", sans-serif; font-size: 11pt; line-height: 1.6; color: #222; }}
+  body {{ font-family: {font_css}; font-size: 11pt; line-height: 1.6; color: #222; }}
   h1 {{ font-size: 22pt; color: #1a1a2e; border-bottom: 2px solid #1a1a2e; padding-bottom: 8px; }}
   h2 {{ font-size: 15pt; color: #16213e; margin-top: 24px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }}
   h3 {{ font-size: 12pt; color: #0f3460; margin-top: 18px; }}
   table {{ border-collapse: collapse; width: 100%; margin: 12px 0; }}
   th, td {{ border: 1px solid #ccc; padding: 6px 10px; text-align: left; }}
   th {{ background-color: #e8e8e8; font-weight: bold; }}
-  code {{ background-color: #f4f4f4; padding: 1px 4px; border-radius: 3px; font-size: 9pt; }}
-  pre {{ background-color: #f4f4f4; padding: 12px; border-radius: 4px; font-size: 9pt; overflow-x: auto; }}
+  code {{ background-color: #f4f4f4; padding: 1px 4px; font-size: 9pt; }}
+  pre {{ background-color: #f4f4f4; padding: 12px; font-size: 9pt; }}
   blockquote {{ border-left: 3px solid #ccc; margin-left: 0; padding-left: 16px; color: #555; }}
   hr {{ border: none; border-top: 1px solid #ddd; margin: 20px 0; }}
   .footer {{ text-align: center; color: #888; font-size: 8pt; margin-top: 30px; }}
@@ -260,16 +216,23 @@ def generate_pdf_from_markdown(task) -> bytes:
     buf = io.BytesIO()
     pisa_status = pisa.CreatePDF(src=html_full, dest=buf, encoding="utf-8")
 
-    if pisa_status.err:
-        logger.warning("xhtml2pdf 转换有警告，回退到 reportlab 模式")
+    # 判断是否真正生成失败：仅当 PDF 内容为空时才回退
+    # xhtml2pdf 经常对不支持的 CSS 产生非零 err，但 PDF 实际生成成功
+    buf.seek(0)
+    pdf_content = buf.read()
+
+    if len(pdf_content) < 100:
+        logger.warning("xhtml2pdf 生成的 PDF 过小 (%d 字节)，可能失败，回退到 reportlab 模式", len(pdf_content))
         return _generate_pdf_reportlab(task)
 
-    buf.seek(0)
-    return buf.read()
+    if pisa_status.err:
+        logger.info("xhtml2pdf 有 %d 个警告，但 PDF 已成功生成 (%d 字节)，忽略警告", pisa_status.err, len(pdf_content))
+
+    return pdf_content
 
 
 def _generate_pdf_reportlab(task) -> bytes:
-    """reportlab 直接生成 PDF（兜底方案）。"""
+    """reportlab 直接生成 PDF（兜底方案，使用中文字体）。"""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)
     styles = _build_styles()

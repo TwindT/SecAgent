@@ -27,6 +27,7 @@ WORKDIR /app
 # 运行阶段只需要动态链接库，不需要 gcc 和 -dev 包！
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # 从 builder 阶段，把刚刚安装好的 Python 包原封不动拷贝过来

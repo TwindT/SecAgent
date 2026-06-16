@@ -287,6 +287,14 @@ def download_report_pdf(task_id: int, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
+    # 检查任务是否已完成
+    task_status = getattr(task.status, "value", str(task.status)) if task.status else ""
+    if task_status not in ("done", "failed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"任务尚未完成（当前状态: {task_status}），无法导出报告",
+        )
+
     pdf_bytes = generate_pdf(task)
 
     return Response(
@@ -302,6 +310,14 @@ def download_report_md(task_id: int, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
+    # 检查任务是否已完成
+    task_status = getattr(task.status, "value", str(task.status)) if task.status else ""
+    if task_status not in ("done", "failed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"任务尚未完成（当前状态: {task_status}），无法导出报告",
+        )
 
     md_text = render_markdown(task)
 
