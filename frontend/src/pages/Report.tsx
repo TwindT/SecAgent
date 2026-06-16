@@ -25,12 +25,9 @@ import {
   Globe,
   Hash,
   Link2,
-  MapPin,
   Skull,
   Eye,
-  ShieldAlert,
   Terminal,
-  Activity,
   Search,
   FileCode,
   Bot,
@@ -293,27 +290,6 @@ function RiskLevelBadge({ level, large }: { level: string; large?: boolean }) {
       <Icon size={large ? 20 : 16} />
       {c.label}
     </span>
-  )
-}
-
-function SeverityDot({ severity }: { severity: string }) {
-  const colors: Record<string, string> = {
-    high: '#EF4444',
-    medium: '#F59E0B',
-    low: '#10B981',
-    info: '#94A3B8',
-  }
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        borderRadius: '50%',
-        flexShrink: 0,
-        width: '8px',
-        height: '8px',
-        background: colors[severity] || '#94A3B8',
-      }}
-    />
   )
 }
 
@@ -951,7 +927,7 @@ const Report = () => {
 
   // ─── Vulnerability table rows ────────────────────
   const vulnTableRows = useMemo<VulnerabilityRow[]>(() => {
-    return filteredVulnerabilities.map((vuln, idx) => {
+    return filteredVulnerabilities.map((vuln) => {
       const originalIdx = vulnerabilities.indexOf(vuln)
       return {
         key: `VULN-${String(originalIdx + 1).padStart(3, '0')}`,
@@ -1153,12 +1129,6 @@ const Report = () => {
     medium: 'rgba(245,158,11,0.06)',
     low: 'rgba(16,185,129,0.06)',
     info: 'rgba(148,163,184,0.06)',
-  }
-  const severityBorderColors: Record<string, string> = {
-    high: 'rgba(239,68,68,0.2)',
-    medium: 'rgba(245,158,11,0.2)',
-    low: 'rgba(16,185,129,0.2)',
-    info: 'rgba(148,163,184,0.2)',
   }
   const severityLabels: Record<string, string> = {
     high: '高危',

@@ -16,7 +16,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
 } from 'recharts'
 import { useRef, useCallback } from 'react'
 import { Download } from 'lucide-react'
@@ -795,7 +794,7 @@ export function TaskSuccessRateChart({ data }: TaskSuccessRateChartProps) {
 
 // ─── Analysis Duration Distribution Bar Chart ───────
 interface DurationDistChartProps {
-  tasks: Array<{ duration: string | null }>
+  tasks: Array<{ created_at: string; updated_at: string; status?: string }>
 }
 
 export function DurationDistChart({ tasks }: DurationDistChartProps) {
@@ -804,16 +803,12 @@ export function DurationDistChart({ tasks }: DurationDistChartProps) {
   const buckets = { under30: 0, '30to60': 0, '1to5': 0, over5: 0 }
 
   tasks.forEach((task) => {
-    if (!task.duration) return
-    const dur = task.duration
-    // Parse duration strings like "2m 30s", "45s", "1m", "5m 12s"
-    let totalSeconds = 0
-    const mMatch = dur.match(/(\d+)m/)
-    const sMatch = dur.match(/(\d+)s/)
-    if (mMatch) totalSeconds += parseInt(mMatch[1]) * 60
-    if (sMatch) totalSeconds += parseInt(sMatch[1])
+    // Calculate duration from created_at and updated_at
+    const start = new Date(task.created_at).getTime()
+    const end = new Date(task.updated_at).getTime()
+    const totalSeconds = Math.round((end - start) / 1000)
 
-    if (totalSeconds === 0) return
+    if (totalSeconds <= 0) return
     if (totalSeconds < 30) buckets.under30++
     else if (totalSeconds < 60) buckets['30to60']++
     else if (totalSeconds < 300) buckets['1to5']++
