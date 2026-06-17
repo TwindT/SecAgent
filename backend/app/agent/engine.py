@@ -112,7 +112,7 @@ class AgentEngine:
         self.max_steps = max_steps
         self.step_timeout = step_timeout
 
-        # 步骤总结器：使用独立的 LLM（默认 qwen-plus）将每个步骤的原始 JSON
+        # 步骤总结器：使用独立的 LLM（默认 qwen3.6-flash）将每个步骤的原始 JSON
         # 内容凝练为纯文本摘要，供前端直接展示，避免前端解析 JSON。
         self.summarizer_llm = summarizer_llm or self._create_default_summarizer()
 
@@ -1175,22 +1175,22 @@ class AgentEngine:
                 logger.warning("步骤回调异常: %s", e)
 
     # ------------------------------------------------------------------
-    # 步骤总结（使用独立的 qwen-plus LLM）
+    # 步骤总结（使用独立的 qwen3.6-flash LLM）
     # ------------------------------------------------------------------
     @staticmethod
     def _create_default_summarizer() -> LLMClient:
         """创建默认的步骤总结器 LLM 客户端。
 
-        使用 SUMMARIZER_MODEL 环境变量指定的模型（默认 qwen-plus），
+        使用 SUMMARIZER_MODEL 环境变量指定的模型（默认 qwen3.6-flash），
         较低的 max_tokens 和 temperature 以加速响应。
         """
-        model = os.getenv("SUMMARIZER_MODEL", "qwen-plus")
+        model = os.getenv("SUMMARIZER_MODEL", "qwen3.6-flash")
         try:
             return LLMClient(
                 model=model,
-                max_tokens=300,
+                max_tokens=200,
                 temperature=0.1,
-                timeout=30.0,
+                timeout=15.0,
                 max_retries=1,
             )
         except Exception as e:
