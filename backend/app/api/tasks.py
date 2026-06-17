@@ -216,42 +216,51 @@ def chat_with_task(
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
-    # 1. 存储用户消息
-    conv_manager.add_message(task_id, "user", req.message)
+    try:
+        # 1. 存储用户消息
+        conv_manager.add_message(task_id, "user", req.message)
 
-    # 2. 加载历史对话
-    history = conv_manager.load_history_as_messages(task_id)
+        # 2. 加载历史对话
+        history = conv_manager.load_history_as_messages(task_id)
 
-    # 3. 构建 system prompts
-    system_prompts = [
-        (
-            "你是一名资深安全分析专家。用户正在对一份已完成的安全分析报告进行追问。"
-            "请基于分析结果简洁专业地回答用户的问题。"
-        ),
-    ]
-    if task.result_json:
-        system_prompts.append(
-            f"以下是已完成的分析结果供参考：\n{task.result_json}"
+        # 3. 构建 system prompts（截断 result_json 防止超长）
+        system_prompts = [
+            (
+                "你是一名资深安全分析专家。用户正在对一份已完成的安全分析报告进行追问。"
+                "请基于分析结果简洁专业地回答用户的问题。"
+            ),
+        ]
+        if task.result_json:
+            # 限制分析结果长度，避免超出 LLM 上下文窗口
+            truncated_json = task.result_json[:3000]
+            if len(task.result_json) > 3000:
+                truncated_json += "\n...(已截断，完整报告请查看原始分析结果)"
+            system_prompts.append(
+                f"以下是已完成的分析结果供参考：\n{truncated_json}"
+            )
+
+        # 4. 上下文窗口管理：截断过长历史后构建最终消息列表
+        messages = conv_manager.build_context_messages(system_prompts, history)
+
+        logger.info(
+            "对话上下文构建完成: task_id=%d system_msgs=%d history_msgs=%d total_tokens=%d",
+            task_id, len(system_prompts), len(history),
+            conv_manager.estimate_total_tokens(messages),
         )
 
-    # 4. 上下文窗口管理：截断过长历史后构建最终消息列表
-    messages = conv_manager.build_context_messages(system_prompts, history)
+        # 5. 调用 LLM
+        llm = LLMClient()
+        result = llm.chat(messages=messages)
+        reply_text = result.get("content") or result.get("error", "无法生成回复")
 
-    logger.info(
-        "对话上下文构建完成: task_id=%d system_msgs=%d history_msgs=%d total_tokens=%d",
-        task_id, len(system_prompts), len(history),
-        conv_manager.estimate_total_tokens(messages),
-    )
+        # 6. 存储助手回复
+        conv_manager.add_message(task_id, "assistant", reply_text)
 
-    # 5. 调用 LLM
-    llm = LLMClient()
-    result = llm.chat(messages=messages)
-    reply_text = result.get("content") or result.get("error", "无法生成回复")
+        return SendMessageResponse(reply=reply_text, task_id=task_id)
 
-    # 6. 存储助手回复
-    conv_manager.add_message(task_id, "assistant", reply_text)
-
-    return SendMessageResponse(reply=reply_text, task_id=task_id)
+    except Exception as e:
+        logger.exception("对话追问失败: task_id=%d", task_id)
+        raise HTTPException(status_code=500, detail=f"对话处理失败: {str(e)}")
 
 
 # ============================================================================

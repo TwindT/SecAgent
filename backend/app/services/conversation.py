@@ -9,7 +9,21 @@
 import logging
 
 from ..agent.llm import LLMClient
-from ..models.database import Conversation, ConversationRole, SessionLocal
+from ..models.database import Conversation, ConversationRole
+
+
+def _get_db_session():
+    """延迟获取数据库会话（避免模块级 import 时 SessionLocal 尚为 None）。
+
+    SessionLocal 在 FastAPI startup 事件中通过 init_db() 初始化，
+    模块级 from-import 会捕获初始化前的 None 值，因此需要延迟导入。
+    """
+    from ..models.database import SessionLocal, init_db
+    if SessionLocal is None:
+        import os
+        database_url = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+        init_db(database_url)
+    return SessionLocal()
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +57,7 @@ class ConversationManager:
         if len(content) > MAX_MESSAGE_LENGTH:
             content = content[:MAX_MESSAGE_LENGTH]
 
-        db = SessionLocal()
+        db = _get_db_session()
         try:
             conv_role = ConversationRole.USER if role == "user" else ConversationRole.ASSISTANT
             msg = Conversation(task_id=task_id, role=conv_role, content=content)
@@ -63,7 +77,7 @@ class ConversationManager:
         limit: int = 50,
     ) -> list[Conversation]:
         """加载指定任务的对话历史，按时间正序排列。"""
-        db = SessionLocal()
+        db = _get_db_session()
         try:
             return (
                 db.query(Conversation)
@@ -151,7 +165,7 @@ class ConversationManager:
     @staticmethod
     def delete_history(task_id: int) -> int:
         """删除指定任务的全部对话历史，返回删除条数。"""
-        db = SessionLocal()
+        db = _get_db_session()
         try:
             count = (
                 db.query(Conversation)

@@ -690,10 +690,7 @@ const Report = () => {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
 
-  // Configure marked for safe chat rendering
-  useMemo(() => {
-    marked.setOptions({ breaks: true, gfm: true })
-  }, [])
+  // marked v18+ — use parse() API; options passed inline since setOptions() is deprecated
 
   // ─── API state ───────────────────────────────────
   const [task, setTask] = useState<TaskResponse | null>(null)
@@ -2765,7 +2762,7 @@ const Report = () => {
                       msg.role === 'assistant'
                         ? {
                             __html:
-                              (marked.parse(msg.content) as string) +
+                              (marked.parse(msg.content, { async: false, breaks: true, gfm: true }) as string) +
                               (isChatTyping && msg.id === messages[messages.length - 1]?.id && msg.role === 'assistant'
                                 ? '<span class="chat-typing-cursor"></span>'
                                 : ''),
@@ -3050,7 +3047,7 @@ const Report = () => {
                   <div
                     className="markdown-body dark-markdown"
                     dangerouslySetInnerHTML={{
-                      __html: marked(markdownContent, { async: false }) as string,
+                      __html: marked.parse(markdownContent, { async: false, breaks: true, gfm: true }) as string,
                     }}
                   />
                 ) : (

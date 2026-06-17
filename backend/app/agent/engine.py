@@ -133,6 +133,7 @@ class AgentEngine:
         self._recent_actions: list[str] = []          # 最近动作指纹，用于重复检测
         self._no_progress_count: int = 0               # 连续无进展步数
         self._fallback_count: int = 0                  # fallback 触发次数
+        self._early_finish_count: int = 0              # LLM 提前结束被拦截的次数（防无限循环）
 
         # 回调（WebSocket 推送）
         self._on_step: Optional[Callable[[dict], None]] = None
@@ -251,6 +252,7 @@ class AgentEngine:
         self._recent_actions = []
         self._no_progress_count = 0
         self._fallback_count = 0
+        self._early_finish_count = 0
 
         logger.info("Agent 启动 task_type=%s tools=%d", task_type, len(tools))
 
@@ -704,6 +706,26 @@ class AgentEngine:
                 return {"content": None, "error": thought_result["error"]}
 
             if thought_result["is_final"]:
+                # ── 最低分析校验：防止 LLM 在强制工具未调用前提前结束 ──
+                if not self._check_minimum_analysis():
+                    if self._early_finish_count >= self._MAX_EARLY_FINISH_INTERCEPTIONS:
+                        logger.warning(
+                            "LLM 已连续 %d 次被拦截提前结束，不再拦截",
+                            self._early_finish_count,
+                        )
+                    else:
+                        self._early_finish_count += 1
+                        reminder = self._get_minimum_analysis_reminder()
+                        self.messages.append({"role": "user", "content": reminder})
+                        self._push_step({
+                            "step_num": self.step_count,
+                            "type": "thought",
+                            "data": {
+                                "content": f"[系统] 检测到分析不充分（拦截 #{self._early_finish_count}），已提示 Agent 继续执行强制工具调用",
+                                "tool_calls_requested": [],
+                            },
+                        })
+                        continue
                 return {"content": thought_result["content"], "error": None}
 
             # ------ Action 阶段：执行工具 ------
@@ -883,6 +905,94 @@ class AgentEngine:
                 if not isinstance(parsed, dict) or "error" not in parsed:
                     called.add(name)
         return called
+
+    # 各任务类型必须调用的最低工具集合
+    _MANDATORY_TOOLS: dict[str, set[str]] = {
+        "malware_analysis": {"extract_file_features", "extract_iocs"},
+        "vulnerability_detection": {"scan_code"},
+    }
+
+    # 各任务类型最低需调用的不同工具数量
+    _MIN_UNIQUE_TOOLS: dict[str, int] = {
+        "malware_analysis": 2,
+        "vulnerability_detection": 1,
+    }
+
+    # 最多允许拦截 LLM 提前结束的次数（防无限循环）
+    _MAX_EARLY_FINISH_INTERCEPTIONS = 2
+
+    def _check_minimum_analysis(self) -> bool:
+        """检查是否已完成最低限度的分析。
+
+        LLM 可能在仅调用 0-1 个工具后就输出 final answer，
+        此处根据任务类型校验强制工具是否已被调用。
+        """
+        called = self._get_called_tools()
+        mandatory = self._MANDATORY_TOOLS.get(self.task_type, set())
+        min_unique = self._MIN_UNIQUE_TOOLS.get(self.task_type, 0)
+
+        # 所有强制工具必须已调用
+        missing = mandatory - called
+        if missing:
+            logger.info(
+                "最低分析校验未通过（缺少强制工具: %s），已调用: %s",
+                list(missing), list(called),
+            )
+            return False
+
+        # 至少需要调用指定数量的不同工具
+        if len(called) < min_unique:
+            logger.info(
+                "最低分析校验未通过（工具数量不足: %d/%d），已调用: %s",
+                len(called), min_unique, list(called),
+            )
+            return False
+
+        return True
+
+    def _get_minimum_analysis_reminder(self) -> str:
+        """生成继续分析的提示消息，明确告知 LLM 还需调用哪些工具。"""
+        called = self._get_called_tools()
+        mandatory = self._MANDATORY_TOOLS.get(self.task_type, set())
+        missing = mandatory - called
+
+        if self.task_type == "malware_analysis":
+            lines = [
+                "【系统指令 — 分析不充分】",
+                "",
+                "你当前的回复被拦截，因为你尚未完成强制分析流程。",
+                "",
+            ]
+            if missing:
+                names = "、".join(sorted(missing))
+                lines.append(f"以下强制工具尚未调用：{names}。请立即调用这些工具。")
+                lines.append("")
+
+            lines.append("完整分析流程要求：")
+            lines.append("1. extract_file_features → 提取文件特征（强制）")
+            lines.append("2. extract_iocs → 提取 IOC 指标（强制）")
+            lines.append("3. query_threat_intel → 查询 IOC 威胁情报")
+            lines.append("4. map_attack → 映射 ATT&CK 技术")
+            lines.append("5. scan_yara → YARA 规则匹配")
+            lines.append("")
+            lines.append("请在完成以上强制步骤后再输出最终 JSON 报告。")
+            lines.append("不要跳过任何强制步骤。")
+        else:
+            lines = [
+                "【系统指令 — 分析不充分】",
+                "",
+                "你当前的回复被拦截，因为你尚未完成强制分析流程。",
+                "",
+            ]
+            if missing:
+                names = "、".join(sorted(missing))
+                lines.append(f"以下强制工具尚未调用：{names}。请立即调用这些工具。")
+                lines.append("")
+            lines.append("请先调用 scan_code 对代码进行静态安全扫描，")
+            lines.append("再根据扫描结果调用 query_cwe / query_cve 获取详情，")
+            lines.append("最后再输出最终 JSON 报告。")
+
+        return "\n".join(lines)
 
     def _do_thought(self, tools: list[dict]) -> dict:
         """Thought 阶段：调用 LLM 进行推理。

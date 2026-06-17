@@ -122,6 +122,8 @@ def _parse_result(result_json: str | None) -> dict:
                 merged["yara_matches"] = findings["yara_matches"]
             if findings.get("file_features"):
                 merged["file_info"] = findings["file_features"]
+            if findings.get("threat_intel_results"):
+                merged["threat_intel_results"] = findings["threat_intel_results"]
 
     # 如果没有 summary，从 aggregated.summary 构建
     if not merged.get("summary") and raw.get("aggregated", {}).get("summary"):
@@ -220,41 +222,83 @@ def _build_vuln_context(task, result: dict) -> dict:
 
 def _build_malware_context(task, result: dict) -> dict:
     """构建恶意代码分析报告的模板上下文。"""
-    summary_data = result.get("summary", {})
+    summary_data = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
     behaviors = result.get("behaviors", result.get("behavior", []))
     iocs = result.get("iocs", result.get("ioc", []))
     attack_mapping = result.get("attack_mapping", result.get("attack_techniques", []))
+    # also try to get attack_mapping from the parsed LLM report (attack_matrix key)
+    if not attack_mapping:
+        attack_mapping = result.get("attack_matrix", [])
     threat_intel = result.get("threat_intel", result.get("intel_results", []))
-    file_info = result.get("file_info", result.get("file_features", {}))
+    # also try threat_intel_results from key_findings
+    if not threat_intel:
+        threat_intel = result.get("threat_intel_results", [])
 
-    # 判定映射
-    verdict_raw = str(result.get("verdict", result.get("malicious", summary_data.get("verdict", "未知"))))
+    # file_info: may be a dict (from LLM report) or a list (from key_findings.file_features)
+    file_info_raw = result.get("file_info", result.get("file_features", {}))
+    if isinstance(file_info_raw, list):
+        # key_findings format: [{file_type, md5, sha256, ...}]
+        file_info = file_info_raw[0] if file_info_raw else {}
+    elif isinstance(file_info_raw, dict):
+        file_info = file_info_raw
+    else:
+        file_info = {}
+
+    # ── 判定: 支持 dict 和 str 两种格式 ──
+    verdict_data = result.get("verdict", result.get("malicious", summary_data.get("verdict", {})))
+    if isinstance(verdict_data, dict):
+        verdict_raw = verdict_data.get("maliciousness", verdict_data.get("verdict", ""))
+        verdict_confidence = verdict_data.get("confidence", "")
+        verdict_reason = verdict_data.get("reason", "")
+    elif isinstance(verdict_data, str):
+        verdict_raw = verdict_data
+        verdict_confidence = ""
+        verdict_reason = ""
+    else:
+        verdict_raw = str(verdict_data) if verdict_data else "未知"
+        verdict_confidence = ""
+        verdict_reason = ""
+
     verdict_map = {"malicious": "🔴 恶意", "suspicious": "🟡 可疑", "benign": "🟢 安全", "clean": "🟢 安全"}
-    verdict = verdict_map.get(verdict_raw.lower(), verdict_raw)
+    verdict = verdict_map.get(verdict_raw.lower(), f"⚠️ {verdict_raw}" if verdict_raw else "⚠️ 未知")
 
     malicious_map = {"malicious": "高危", "suspicious": "中危", "benign": "无威胁", "clean": "无威胁", "未知": "待确认"}
     malicious_level = malicious_map.get(verdict_raw.lower(), str(verdict_raw))
 
-    # 行为列表
+    # ── 行为列表: LLM 输出字段为 description/severity/attack_technique ──
     behavior_md = "未检测到明显恶意行为。" if not isinstance(behaviors, list) or not behaviors else ""
     for b in (behaviors or []):
         if isinstance(b, dict):
-            behavior_md += f"\n- **{b.get('name', b.get('behavior', ''))}**: {b.get('description', '')}"
+            desc = b.get("description", b.get("name", b.get("behavior", "")))
+            sev = b.get("severity", "")
+            tech = b.get("attack_technique", "")
+            tactic = b.get("attack_tactic", "")
+            evidence = b.get("evidence", "")
+            line = f"\n- **{desc}**" if desc else "\n- **（未命名行为）**"
+            if sev:
+                line += f" [严重度: {sev.upper()}]"
+            if tech:
+                line += f" ATT&CK: {tech}"
+            if tactic:
+                line += f" ({tactic})"
+            if evidence:
+                line += f"\n  - 证据: {evidence}"
+            behavior_md += line
         elif isinstance(b, str):
             behavior_md += f"\n- {b}"
 
-    # ATT&CK 映射
+    # ── ATT&CK 映射 ──
     attack_md = "未匹配到 ATT&CK 技术。" if not isinstance(attack_mapping, list) or not attack_mapping else ""
     for t in (attack_mapping or []):
         if isinstance(t, dict):
             tech_id = t.get("technique_id", t.get("id", ""))
             tech_name = t.get("technique_name", t.get("name", ""))
             tactic = t.get("tactic", "")
-            attack_md += f"\n- **{tech_id}** — {tech_name}"
+            attack_md += f"\n- **{tech_id}** — {tech_name}" if tech_id or tech_name else ""
             if tactic:
                 attack_md += f"（战术: {tactic}）"
 
-    # IOC 表格
+    # ── IOC 表格 ──
     ioc_headers = ["类型", "值", "说明"]
     ioc_rows = []
     if isinstance(iocs, list):
@@ -267,23 +311,37 @@ def _build_malware_context(task, result: dict) -> dict:
                 ])
     ioc_table = _fmt_table(ioc_headers, ioc_rows) if ioc_rows else "未提取到 IOC。"
 
-    # 威胁情报
+    # ── 威胁情报 ──
     intel_md = "暂无威胁情报查询结果。" if not isinstance(threat_intel, list) or not threat_intel else ""
     for ti in (threat_intel or []):
         if isinstance(ti, dict):
-            intel_md += f"\n- **{ti.get('indicator', '')}**: {ti.get('result', ti.get('status', ''))}"
+            indicator = ti.get("ioc_value", ti.get("indicator", ti.get("value", "")))
+            result_str = str(ti.get("malicious", ti.get("result", ti.get("status", ""))))
+            pulse_count = ti.get("pulse_count", "")
+            sources = ti.get("sources", [])
+            intel_md += f"\n- **{indicator}**: {result_str}"
+            if pulse_count:
+                intel_md += f"（关联 Pulse {pulse_count} 条）"
+            if sources:
+                intel_md += f" 来源: {', '.join(str(s) for s in sources[:3])}"
         elif isinstance(ti, str):
             intel_md += f"\n- {ti}"
 
-    # 可疑导入/字符串处理
+    # ── 文件特征: file_info 可能是 list[dict] 或 dict ──
     suspicious_imports = file_info.get("suspicious_imports", file_info.get("imports", []))
-    suspicious_strings = file_info.get("suspicious_strings", file_info.get("strings", []))
+    suspicious_strings = file_info.get("suspicious_strings", file_info.get("strings_of_interest", file_info.get("strings", [])))
 
     imp_str = ", ".join(f"`{x}`" for x in suspicious_imports[:10]) if isinstance(suspicious_imports, list) and suspicious_imports else "-"
     str_str = ", ".join(f"`{x[:60]}`" for x in suspicious_strings[:5]) if isinstance(suspicious_strings, list) and suspicious_strings else "-"
-
     if isinstance(suspicious_strings, list) and len(suspicious_strings) > 5:
         str_str += f" ... 等 {len(suspicious_strings)} 项"
+
+    # ── 清除建议: 可能是 list 或 str ──
+    remediation_raw = result.get("remediation", result.get("recommendations", "暂无清除建议。"))
+    if isinstance(remediation_raw, list):
+        remediation = "\n".join(f"- {item}" for item in remediation_raw)
+    else:
+        remediation = str(remediation_raw)
 
     ctx = {
         "task_id": str(task.id),
@@ -295,7 +353,7 @@ def _build_malware_context(task, result: dict) -> dict:
         "created_at": task.created_at.strftime("%Y-%m-%d %H:%M:%S") if task.created_at else "-",
         "elapsed": f"{result.get('elapsed_seconds', '-')} 秒",
         "verdict": verdict,
-        "confidence": _fmt_confidence(result.get("confidence", summary_data.get("confidence", "-"))),
+        "confidence": _fmt_confidence(result.get("confidence", verdict_confidence or summary_data.get("confidence", "-"))),
         "malicious_level": malicious_level,
         "summary": _get_ai_summary(task, result),
         "behaviors": behavior_md,
@@ -306,7 +364,7 @@ def _build_malware_context(task, result: dict) -> dict:
         "suspicious_strings": str_str,
         "obfuscation": str(file_info.get("obfuscation", file_info.get("entropy", "-"))),
         "threat_intel": intel_md,
-        "remediation": result.get("remediation", result.get("recommendations", "暂无清除建议。")),
+        "remediation": remediation,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
     }
     return ctx
