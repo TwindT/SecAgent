@@ -21,7 +21,7 @@ async def run_llm_test():
     }
     
     data = {
-        "model": "qwen-turbo",
+        "model": "qwen3.6-plus",
         "messages": [
             {"role": "system", "content": "你是一个安全专家助手。"},
             {"role": "user", "content": "什么是 SQL 注入？"}

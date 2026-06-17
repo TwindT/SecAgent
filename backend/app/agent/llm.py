@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-DEFAULT_MODEL = "qwen-turbo"
+DEFAULT_MODEL = "qwen3.6-plus"
 
 # 可重试的异常类型
 RETRYABLE_EXCEPTIONS = (

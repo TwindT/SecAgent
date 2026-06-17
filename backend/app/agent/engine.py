@@ -105,11 +105,16 @@ class AgentEngine:
         tool_reg: Optional[ToolRegistry] = None,
         max_steps: int = 10,
         step_timeout: float = 60.0,
+        summarizer_llm: Optional[LLMClient] = None,
     ) -> None:
         self.llm = llm or LLMClient()
         self.tool_reg = tool_reg or tool_registry
         self.max_steps = max_steps
         self.step_timeout = step_timeout
+
+        # 步骤总结器：使用独立的 LLM（默认 qwen-plus）将每个步骤的原始 JSON
+        # 内容凝练为纯文本摘要，供前端直接展示，避免前端解析 JSON。
+        self.summarizer_llm = summarizer_llm or self._create_default_summarizer()
 
         # 运行时状态
         self.task_type: str = ""
@@ -1150,10 +1155,162 @@ class AgentEngine:
         })
 
     def _push_step(self, step: dict) -> None:
-        """推送步骤到存储和回调。"""
+        """推送步骤到存储和回调。
+
+        在推送前，对 thought/action/observation 类型的步骤调用
+        summarizer_llm 生成纯文本摘要，附加到 step["data"]["summary"]。
+        前端可直接展示 summary 字段，无需解析原始 JSON。
+        """
+        # 对需要总结的步骤类型，同步调用 summarizer LLM 生成纯文本摘要
+        step_type = step.get("type", "")
+        if step_type in ("thought", "action", "observation") and self.summarizer_llm:
+            summary = self._summarize_step(step_type, step.get("data", {}))
+            step["data"]["summary"] = summary
+
         self.steps.append(step)
         if self._on_step:
             try:
                 self._on_step(step)
             except Exception as e:
                 logger.warning("步骤回调异常: %s", e)
+
+    # ------------------------------------------------------------------
+    # 步骤总结（使用独立的 qwen-plus LLM）
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _create_default_summarizer() -> LLMClient:
+        """创建默认的步骤总结器 LLM 客户端。
+
+        使用 SUMMARIZER_MODEL 环境变量指定的模型（默认 qwen-plus），
+        较低的 max_tokens 和 temperature 以加速响应。
+        """
+        model = os.getenv("SUMMARIZER_MODEL", "qwen-plus")
+        try:
+            return LLMClient(
+                model=model,
+                max_tokens=300,
+                temperature=0.1,
+                timeout=30.0,
+                max_retries=1,
+            )
+        except Exception as e:
+            logger.warning("创建 summarizer LLM 失败，将跳过步骤总结: %s", e)
+            return None  # type: ignore[return-value]
+
+    # 步骤总结的 System Prompt
+    _SUMMARIZER_SYSTEM_PROMPT = """你是一名安全分析助手。你的任务是将 Agent 分析步骤的原始数据凝练为简洁的中文纯文本描述。
+
+要求：
+1. 直接输出总结文本，不要加标题、不要使用 Markdown 格式标记、不要输出 JSON
+2. 突出关键信息：调用的工具名称、发现数量、关键发现内容
+3. 语言简洁专业，控制在 50-150 字
+4. 使用中文
+
+注意：只输出总结文本本身，不要有任何前缀或解释。"""
+
+    def _summarize_step(self, step_type: str, data: dict) -> str:
+        """调用 summarizer_llm 将步骤原始数据总结为纯文本。
+
+        Parameters
+        ----------
+        step_type : str
+            "thought" | "action" | "observation"
+        data : dict
+            步骤的原始数据
+
+        Returns
+        -------
+        str
+            总结后的纯文本。如果总结失败则返回规则化的兜底文本。
+        """
+        # 将原始数据转为 JSON 字符串作为 LLM 输入（截断防止过长）
+        raw_text = json.dumps(data, ensure_ascii=False)
+        if len(raw_text) > 2000:
+            raw_text = raw_text[:2000] + "...(已截断)"
+
+        type_desc = {
+            "thought": "思考",
+            "action": "执行操作",
+            "observation": "观察结果",
+        }.get(step_type, step_type)
+
+        user_content = f"步骤类型：{type_desc}\n原始数据：\n{raw_text}\n\n请总结此步骤的内容。"
+
+        messages = [
+            {"role": "system", "content": self._SUMMARIZER_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+
+        try:
+            response = self.summarizer_llm.chat(messages=messages)
+            if response.get("error"):
+                logger.warning("步骤总结 LLM 调用出错: %s", response["error"])
+                return self._fallback_summary(step_type, data)
+
+            summary = (response.get("content") or "").strip()
+            if not summary or len(summary) < 5:
+                return self._fallback_summary(step_type, data)
+
+            return summary
+
+        except Exception as e:
+            logger.warning("步骤总结异常: %s", e)
+            return self._fallback_summary(step_type, data)
+
+    @staticmethod
+    def _fallback_summary(step_type: str, data: dict) -> str:
+        """LLM 总结失败时的规则化兜底摘要。"""
+        try:
+            if step_type == "thought":
+                content = data.get("content", "")
+                if isinstance(content, str):
+                    # 截断过长的思考内容
+                    return content[:150] + ("..." if len(content) > 150 else "")
+                return "Agent 正在思考下一步分析策略"
+
+            if step_type == "action":
+                results = data.get("results", [])
+                if not results:
+                    return "执行工具操作"
+                parts = []
+                for r in results:
+                    name = r.get("name", "未知工具")
+                    ok = "成功" if r.get("ok") else "失败"
+                    line = f"调用 {name}({ok})"
+                    if r.get("findings_count") is not None:
+                        line += f"，发现 {r['findings_count']} 个漏洞"
+                    elif r.get("iocs_count") is not None:
+                        line += f"，提取 {r['iocs_count']} 个 IOC"
+                    elif r.get("results_count") is not None:
+                        line += f"，{r['results_count']} 条结果"
+                    elif r.get("techniques_count") is not None:
+                        line += f"，{r['techniques_count']} 项 ATT&CK 技术"
+                    elif r.get("matches_count") is not None:
+                        line += f"，{r['matches_count']} 条 YARA 匹配"
+                    parts.append(line)
+                return "；".join(parts)
+
+            if step_type == "observation":
+                observations = data.get("observations", [])
+                if not observations:
+                    return "获取工具返回结果"
+                parts = []
+                for o in observations:
+                    tool = o.get("tool", "未知工具")
+                    line = f"{tool}"
+                    if o.get("findings_count") is not None:
+                        line += f"：发现 {o['findings_count']} 个漏洞"
+                    elif o.get("iocs_count") is not None:
+                        line += f"：提取 {o['iocs_count']} 个 IOC"
+                    elif o.get("results_count") is not None:
+                        line += f"：{o['results_count']} 条结果"
+                    elif o.get("techniques_count") is not None:
+                        line += f"：{o['techniques_count']} 项 ATT&CK 技术"
+                    elif o.get("matches_count") is not None:
+                        line += f"：{o['matches_count']} 条 YARA 匹配"
+                    parts.append(line)
+                return "；".join(parts)
+
+            return "分析步骤"
+        except Exception:
+            return "分析步骤"
